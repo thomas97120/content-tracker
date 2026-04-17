@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Content Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0a0f;
+    --surface:  #13131a;
+    --card:     #1a1a24;
+    --border:   rgba(255,255,255,0.07);
+    --text:     #f0f0f5;
+    --muted:    #6b6b80;
+    --accent:   #7c6aff;
+    --accent2:  #ff6a9b;
+    --green:    #3ddc84;
+    --amber:    #ffb347;
+    --red:      #ff5555;
+    --ig:       #e1306c;
+    --tt:       #ffffff;
+    --yt:       #ff0000;
+    --fb:       #1877f2;
+    --snap:     #fffc00;
+    --r: 16px;
+    --r-sm: 10px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── LOGIN ─────────────────────────────────────── */
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    gap: 32px;
+  }
+
+  .login-logo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-mark {
+    width: 64px; height: 64px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+  }
+
+  .login-logo h1 {
+    font-size: 22px; font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+
+  .login-logo p {
+    font-size: 13px; color: var(--muted);
+  }
+
+  .login-card {
+    width: 100%; max-width: 340px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  .field-label {
+    font-size: 12px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+
+  input[type="password"], input[type="text"], input[type="number"], input[type="date"], select, textarea {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    padding: 12px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+
+  select option { background: var(--surface); }
+
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border: none; border-radius: var(--r-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px; font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+
+  .btn:active { transform: scale(0.98); opacity: 0.9; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-green  { background: var(--green);  color: #000; }
+  .btn-red    { background: var(--red);    color: #fff; }
+  .btn-amber  { background: var(--amber);  color: #000; }
+
+  .login-error {
+    font-size: 13px; color: var(--red);
+    text-align: center; display: none;
+  }
+
+  /* ── APP SHELL ──────────────────────────────────── */
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+
+  /* Top bar */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .topbar-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+  .topbar-role {
+    font-size: 11px; font-weight: 500;
+    padding: 4px 10px; border-radius: 20px;
+    background: var(--surface); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  .topbar-role.admin { background: rgba(124,106,255,0.15); color: var(--accent); border-color: rgba(124,106,255,0.3); }
+
+  /* Page content */
+  .page { display: none; padding: 20px; flex-direction: column; gap: 20px; }
+  .page.active { display: flex; }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: sticky; bottom: 0; z-index: 100;
+    background: rgba(10,10,15,0.92);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border);
+    padding: 8px 8px 20px;
+    display: grid;
+  }
+
+  .nav-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 8px 4px;
+    border: none; background: transparent;
+    color: var(--muted); font-family: 'DM Sans', sans-serif;
+    font-size: 10px; font-weight: 500;
+    cursor: pointer; border-radius: var(--r-sm);
+    transition: color 0.2s, background 0.2s;
+  }
+
+  .nav-btn .icon { font-size: 20px; line-height: 1; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn.active .icon { transform: scale(1.1); }
+
+  /* ── CARDS ──────────────────────────────────────── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 18px;
+  }
+
+  .card-title {
+    font-size: 12px; font-weight: 500;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 14px;
+  }
+
+  /* Stat grid */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 14px;
+  }
+
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .stat-value { font-size: 22px; font-weight: 600; font-family: 'DM Mono', monospace; letter-spacing: -1px; }
+  .stat-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .stat-value.green  { color: var(--green); }
+  .stat-value.amber  { color: var(--amber); }
+  .stat-value.purple { color: var(--accent); }
+
+  /* Platform pills */
+  .platform-row {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+
+  .platform-pill {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px; font-weight: 500;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--muted);
+    transition: all 0.15s;
+  }
+
+  .platform-pill.active { color: #fff; border-color: transparent; }
+  .platform-pill[data-p="Instagram"].active  { background: var(--ig); }
+  .platform-pill[data-p="TikTok"].active     { background: #333; }
+  .platform-pill[data-p="YouTube"].active    { background: var(--yt); }
+  .platform-pill[data-p="Facebook"].active   { background: var(--fb); }
+  .platform-pill[data-p="Snapchat"].active   { background: #e6d800; color: #000; }
+
+  /* Post rows */
+  .post-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .post-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 14px;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .post-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  .post-info { flex: 1; min-width: 0; }
+  .post-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .post-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .post-eng   { font-size: 13px; font-weight: 600; font-family: 'DM Mono', monospace; flex-shrink: 0; }
+
+  /* Eng color */
+  .eng-high   { color: var(--green); }
+  .eng-mid    { color: var(--amber); }
+  .eng-low    { color: var(--red); }
+
+  /* ── SWIPE CARD ─────────────────────────────────── */
+  .swipe-area {
+    display: flex; flex-direction: column; gap: 16px; align-items: center;
+  }
+
+  .idea-card {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 24px;
+    transition: transform 0.3s, opacity 0.3s;
+  }
+
+  .idea-card.swipe-right {
+    transform: translateX(120%) rotate(8deg);
+    opacity: 0;
+  }
+
+  .idea-card.swipe-left {
+    transform: translateX(-120%) rotate(-8deg);
+    opacity: 0;
+  }
+
+  .idea-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 500;
+    padding: 4px 10px; border-radius: 20px;
+    background: rgba(124,106,255,0.15); color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .idea-title {
+    font-size: 20px; font-weight: 600; letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+
+  .idea-desc { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+  .idea-meta {
+    margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 16px;
+  }
+
+  .idea-metric { display: flex; flex-direction: column; gap: 2px; }
+  .idea-metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .idea-metric-val   { font-size: 18px; font-weight: 600; font-family: 'DM Mono', monospace; }
+
+  .swipe-btns {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%;
+  }
+
+  .swipe-btn {
+    padding: 14px; border: none; border-radius: var(--r-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: transform 0.1s, opacity 0.15s;
+  }
+
+  .swipe-btn:active { transform: scale(0.96); }
+  .swipe-btn.reject { background: rgba(255,85,85,0.15); color: var(--red); }
+  .swipe-btn.later  { background: rgba(255,179,71,0.15); color: var(--amber); }
+  .swipe-btn.approve{ background: rgba(61,220,132,0.15); color: var(--green); }
+
+  .swipe-counter { font-size: 12px; color: var(--muted); text-align: center; }
+
+  /* ── MANUAL STATS FORM ──────────────────────────── */
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-row   { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-stack { display: flex; flex-direction: column; gap: 14px; }
+
+  .success-msg {
+    padding: 12px; border-radius: var(--r-sm);
+    background: rgba(61,220,132,0.1); color: var(--green);
+    font-size: 13px; text-align: center; display: none;
+  }
+
+  /* ── ADMIN DASHBOARD ────────────────────────────── */
+  .creator-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .creator-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .creator-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 600; color: #fff; flex-shrink: 0;
+  }
+
+  .creator-info { flex: 1; }
+  .creator-name { font-size: 14px; font-weight: 500; }
+  .creator-sub  { font-size: 12px; color: var(--muted); }
+  .creator-badge {
+    font-size: 11px; font-weight: 500;
+    padding: 4px 10px; border-radius: 20px;
+  }
+
+  .badge-good   { background: rgba(61,220,132,0.12); color: var(--green); }
+  .badge-ok     { background: rgba(255,179,71,0.12);  color: var(--amber); }
+  .badge-low    { background: rgba(255,85,85,0.12);   color: var(--red); }
+
+  .sync-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+  }
+
+  .sync-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    flex-shrink: 0;
+  }
+
+  .sync-text { flex: 1; font-size: 13px; color: var(--muted); }
+  .sync-btn  {
+    font-size: 12px; font-weight: 500; padding: 6px 14px;
+    border: 1px solid var(--border); border-radius: 20px;
+    background: transparent; color: var(--text); cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s;
+  }
+  .sync-btn:hover { background: var(--card); }
+
+  /* ── SECTION TITLE ──────────────────────────────── */
+  .section-title {
+    font-size: 18px; font-weight: 600; letter-spacing: -0.4px;
+  }
+
+  .section-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  /* ── EMPTY STATE ────────────────────────────────── */
+  .empty {
+    padding: 40px 20px; text-align: center;
+    color: var(--muted); font-size: 14px;
+  }
+
+  /* ── LOADING SPINNER ────────────────────────────── */
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 20px auto;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── ANIMATIONS ─────────────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .page.active > * {
+    animation: fadeUp 0.3s ease both;
+  }
+
+  .page.active > *:nth-child(1) { animation-delay: 0.00s; }
+  .page.active > *:nth-child(2) { animation-delay: 0.05s; }
+  .page.active > *:nth-child(3) { animation-delay: 0.10s; }
+  .page.active > *:nth-child(4) { animation-delay: 0.15s; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-logo">
+    <div class="logo-mark">📊</div>
+    <h1>Content Tracker</h1>
+    <p>Connecte-toi pour accéder à tes stats</p>
+  </div>
+
+  <div class="login-card">
+    <div>
+      <div class="field-label">Clé d'accès</div>
+      <input type="password" id="login-key" placeholder="Entre ta clé…" autocomplete="off">
+    </div>
+    <button class="btn btn-primary" onclick="handleLogin()">Continuer</button>
+    <div class="login-error" id="login-error">Clé incorrecte, réessaie.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     APP SHELL
+══════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">Content Tracker</div>
+    <div class="topbar-role" id="topbar-role">Créateur</div>
+  </div>
+
+  <!-- ── PAGE : STATS ── -->
+  <div class="page active" id="page-stats">
+    <div>
+      <div class="section-title" id="stats-greeting">Tes stats</div>
+      <div class="section-sub">7 derniers jours</div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-label">Vues totales</div>
+        <div class="stat-value purple" id="total-views">—</div>
+        <div class="stat-sub">toutes plateformes</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Engagement moy.</div>
+        <div class="stat-value green" id="avg-eng">—</div>
+        <div class="stat-sub">sur tes posts</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Abonnés</div>
+        <div class="stat-value" id="total-followers">—</div>
+        <div class="stat-sub">total cumulé</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Posts publiés</div>
+        <div class="stat-value amber" id="total-posts">—</div>
+        <div class="stat-sub">cette semaine</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Par plateforme</div>
+      <div class="platform-row" id="platform-pills"></div>
+      <div class="post-list" id="post-list">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE : SAISIE ── -->
+  <div class="page" id="page-saisie">
+    <div>
+      <div class="section-title">Saisie manuelle</div>
+      <div class="section-sub">TikTok · Snapchat</div>
+    </div>
+
+    <div class="card">
+      <div class="form-stack">
+        <div class="form-group">
+          <div class="field-label">Plateforme</div>
+          <select id="form-platform">
+            <option value="TikTok">🎵 TikTok</option>
+            <option value="Snapchat">👻 Snapchat</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">Date du post</div>
+          <input type="date" id="form-date">
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">Titre / Description</div>
+          <input type="text" id="form-title" placeholder="Ex: Reel cuisine italienne…">
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">Format</div>
+          <select id="form-format">
+            <option>Vidéo courte</option>
+            <option>Story</option>
+            <option>Live</option>
+            <option>Photo</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <div class="field-label">Vues</div>
+            <input type="number" id="form-views" placeholder="0">
+          </div>
+          <div class="form-group">
+            <div class="field-label">Portée</div>
+            <input type="number" id="form-reach" placeholder="0">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <div class="field-label">Likes</div>
+            <input type="number" id="form-likes" placeholder="0">
+          </div>
+          <div class="form-group">
+            <div class="field-label">Commentaires</div>
+            <input type="number" id="form-comments" placeholder="0">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <div class="field-label">Partages</div>
+            <input type="number" id="form-shares" placeholder="0">
+          </div>
+          <div class="form-group">
+            <div class="field-label">Sauvegardes</div>
+            <input type="number" id="form-saves" placeholder="0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">Abonnés (total actuel)</div>
+          <input type="number" id="form-followers" placeholder="0">
+        </div>
+
+        <button class="btn btn-primary" onclick="submitManualStats()">Enregistrer</button>
+        <div class="success-msg" id="form-success">✓ Stats enregistrées dans Google Sheets !</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE : SWIPE ── -->
+  <div class="page" id="page-swipe">
+    <div>
+      <div class="section-title">Idées de contenu</div>
+      <div class="section-sub">Swipe pour décider</div>
+    </div>
+
+    <div class="swipe-area">
+      <div class="swipe-counter" id="swipe-counter">Chargement…</div>
+
+      <div class="idea-card" id="idea-card">
+        <div class="idea-tag" id="idea-tag">Format</div>
+        <div class="idea-title" id="idea-title">—</div>
+        <div class="idea-desc"  id="idea-desc">—</div>
+        <div class="idea-meta">
+          <div class="idea-metric">
+            <div class="idea-metric-label">Viral</div>
+            <div class="idea-metric-val" id="idea-viral">—</div>
+          </div>
+          <div class="idea-metric">
+            <div class="idea-metric-label">Effort</div>
+            <div class="idea-metric-val" id="idea-effort">—</div>
+          </div>
+          <div class="idea-metric">
+            <div class="idea-metric-label">ROI</div>
+            <div class="idea-metric-val" id="idea-roi">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="swipe-btns">
+        <button class="swipe-btn reject" onclick="swipe('reject')">❌ Passer</button>
+        <button class="swipe-btn later"  onclick="swipe('later')">🕐 Plus tard</button>
+        <button class="swipe-btn approve" onclick="swipe('approve')">✅ Faire</button>
+      </div>
+
+      <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="addIdeaForm()">+ Ajouter une idée</button>
+    </div>
+
+    <!-- Add idea form (hidden by default) -->
+    <div class="card hidden" id="add-idea-form">
+      <div class="card-title">Nouvelle idée</div>
+      <div class="form-stack">
+        <div class="form-group">
+          <div class="field-label">Idée de contenu</div>
+          <input type="text" id="new-idea-title" placeholder="Ex: Tutorial makeup 60s…">
+        </div>
+        <div class="form-group">
+          <div class="field-label">Description</div>
+          <textarea id="new-idea-desc" rows="3" placeholder="Décris l'idée…" style="resize:none"></textarea>
+        </div>
+        <div class="form-group">
+          <div class="field-label">Format</div>
+          <select id="new-idea-format">
+            <option>Reel</option><option>Story</option><option>TikTok</option>
+            <option>YouTube Short</option><option>Post photo</option><option>Live</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <div class="field-label">Score viral (1-10)</div>
+            <input type="number" id="new-idea-viral" min="1" max="10" placeholder="7">
+          </div>
+          <div class="form-group">
+            <div class="field-label">Effort (1-10)</div>
+            <input type="number" id="new-idea-effort" min="1" max="10" placeholder="4">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveNewIdea()">Ajouter à la liste</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PAGE : ADMIN ── -->
+  <div class="page hidden" id="page-admin">
+    <div>
+      <div class="section-title">Dashboard admin</div>
+      <div class="section-sub">Vue globale des créateurs</div>
+    </div>
+
+    <div class="sync-bar">
+      <div class="sync-dot"></div>
+      <div class="sync-text" id="sync-text">Serveur connecté</div>
+      <button class="sync-btn" onclick="triggerSync()">Sync APIs</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Créateurs</div>
+      <div class="creator-list" id="creator-list">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Performance globale</div>
+      <div class="stat-grid" id="admin-stats">
+        <div class="stat-box">
+          <div class="stat-label">Vues totales</div>
+          <div class="stat-value purple" id="admin-views">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Engagement moy.</div>
+          <div class="stat-value green" id="admin-eng">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Top plateforme</div>
+          <div class="stat-value" id="admin-top-platform" style="font-size:16px">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Créateurs actifs</div>
+          <div class="stat-value amber" id="admin-creators">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom nav (creator) -->
+  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(3, 1fr)">
+    <button class="nav-btn active" onclick="showPage('stats', this)">
+      <span class="icon">📊</span>Stats
+    </button>
+    <button class="nav-btn" onclick="showPage('swipe', this)">
+      <span class="icon">🎯</span>Décisions
+    </button>
+    <button class="nav-btn" onclick="showPage('saisie', this)">
+      <span class="icon">✏️</span>Saisie
+    </button>
+  </nav>
+
+  <!-- Bottom nav (admin) -->
+  <nav class="bottom-nav hidden" id="nav-admin" style="grid-template-columns: repeat(4, 1fr)">
+    <button class="nav-btn active" onclick="showPage('stats', this, 'admin')">
+      <span class="icon">📊</span>Stats
+    </button>
+    <button class="nav-btn" onclick="showPage('admin', this, 'admin')">
+      <span class="icon">👑</span>Admin
+    </button>
+    <button class="nav-btn" onclick="showPage('swipe', this, 'admin')">
+      <span class="icon">🎯</span>Décisions
+    </button>
+    <button class="nav-btn" onclick="showPage('saisie', this, 'admin')">
+      <span class="icon">✏️</span>Saisie
+    </button>
+  </nav>
+
+</div><!-- /#app -->
+
+<script>
+// ══════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════
+const API       = 'https://prune-humorous-outshoot.ngrok-free.dev';  // ← change en prod par ton URL Render
+const ADMIN_KEY = 'admin-secret-123';        // ← même valeur que dans .env
+const CREATOR_KEY = 'creator-secret-456';    // ← même valeur que dans .env
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let currentRole = null;
+let currentKey  = null;
+let currentPlatform = 'Instagram';
+let allStats    = {};
+let ideas       = [
+  { title: "Tutorial skincare 60s",    desc: "Routine matin en moins d'une minute, format Reel vertical.", format: "Reel",          viral: 8, effort: 3 },
+  { title: "Behind the scenes studio", desc: "Montrer les coulisses de ta création de contenu.", format: "Story",         viral: 6, effort: 2 },
+  { title: "Collab avec un créateur",  desc: "Duet TikTok ou collab Instagram avec quelqu'un de ta niche.", format: "TikTok",        viral: 9, effort: 6 },
+  { title: "Top 5 de la semaine",      desc: "Format listicle rapide sur les tendances de ta niche.", format: "YouTube Short", viral: 7, effort: 4 },
+];
+let ideaIndex = 0;
+
+const PLATFORM_COLORS = {
+  Instagram: '#e1306c', TikTok: '#aaa', YouTube: '#ff0000',
+  Facebook: '#1877f2',  Snapchat: '#e6d800'
+};
+
+// ══════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════
+function handleLogin() {
+  const key = document.getElementById('login-key').value.trim();
+  if (key === ADMIN_KEY) {
+    login('admin', key);
+  } else if (key === CREATOR_KEY) {
+    login('creator', key);
+  } else {
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+
+document.getElementById('login-key').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleLogin();
+});
+
+function login(role, key) {
+  currentRole = role;
+  currentKey  = key;
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+
+  const roleEl = document.getElementById('topbar-role');
+  roleEl.textContent = role === 'admin' ? '👑 Admin' : '✏️ Créateur';
+  if (role === 'admin') roleEl.classList.add('admin');
+
+  document.getElementById('stats-greeting').textContent =
+    role === 'admin' ? 'Vue globale' : 'Tes stats';
+
+  if (role === 'admin') {
+    document.getElementById('nav-creator').classList.add('hidden');
+    document.getElementById('nav-admin').classList.remove('hidden');
+    document.getElementById('page-admin').classList.remove('hidden');
+    loadAdminData();
+  }
+
+  // Set today's date in form
+  document.getElementById('form-date').valueAsDate = new Date();
+
+  loadStats();
+  renderIdea();
+}
+
+// ══════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════
+function showPage(name, btn, navType) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById('page-' + name);
+  if (target) target.classList.add('active');
+
+  const navId = navType === 'admin' ? 'nav-admin' : 'nav-creator';
+  document.querySelectorAll(`#${navId} .nav-btn`).forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+// ══════════════════════════════════════════════
+//  STATS PAGE
+// ══════════════════════════════════════════════
+async function loadStats() {
+  try {
+    const resp = await fetch(`${API}/api/stats/creator`, {
+      headers: { 'X-API-Key': currentKey }
+    });
+    const data = await resp.json();
+    allStats = data.stats || {};
+    renderSummary();
+    renderPlatformPills();
+    renderPosts();
+  } catch(e) {
+    // Fallback demo data si le serveur n'est pas encore configuré
+    allStats = getDemoStats();
+    renderSummary();
+    renderPlatformPills();
+    renderPosts();
+  }
+}
+
+function getDemoStats() {
+  return {
+    Instagram: [
+      { date:'2026-04-10', titre:'Reel cuisine italienne', format:'REEL', vues:12400, reach:9800, likes:843, commentaires:67, partages:124, sauvegardes:312, taux_eng:10.8, score:4.2 },
+      { date:'2026-04-12', titre:'Story Q&A followers',   format:'STORY', vues:3200,  reach:2900, likes:210, commentaires:88, partages:12,  sauvegardes:45,  taux_eng:11.1, score:1.4 },
+    ],
+    TikTok: [
+      { date:'2026-04-11', titre:'Tutorial maquillage 60s', format:'Vidéo courte', vues:48000, reach:44000, likes:3200, commentaires:412, partages:890, sauvegardes:1100, taux_eng:11.7, score:18.2 },
+    ],
+    YouTube: [
+      { date:'2026-04-09', titre:'Vlog semaine Paris',     format:'Video', vues:8400,  reach:8400, likes:420,  commentaires:95,  partages:67,  sauvegardes:0,   taux_eng:6.9,  score:3.1 },
+    ],
+    Facebook: [], Snapchat: [],
+  };
+}
+
+function renderSummary() {
+  let totalViews = 0, totalPosts = 0, totalFollowers = 0, engSum = 0, engCount = 0;
+  for (const [plat, posts] of Object.entries(allStats)) {
+    for (const p of posts) {
+      totalViews += p.vues || 0;
+      totalPosts++;
+      if (p.taux_eng) { engSum += p.taux_eng; engCount++; }
+    }
+  }
+  document.getElementById('total-views').textContent    = fmt(totalViews);
+  document.getElementById('avg-eng').textContent        = engCount ? (engSum/engCount).toFixed(1)+'%' : '—';
+  document.getElementById('total-followers').textContent = fmt(totalFollowers) || '—';
+  document.getElementById('total-posts').textContent    = totalPosts;
+}
+
+function renderPlatformPills() {
+  const container = document.getElementById('platform-pills');
+  container.innerHTML = '';
+  const platforms = Object.keys(allStats).filter(p => allStats[p].length > 0);
+  if (!platforms.length) platforms.push('Instagram');
+
+  platforms.forEach((p, i) => {
+    const pill = document.createElement('div');
+    pill.className = 'platform-pill' + (i === 0 ? ' active' : '');
+    pill.dataset.p  = p;
+    pill.textContent = platformEmoji(p) + ' ' + p;
+    pill.onclick = () => {
+      document.querySelectorAll('.platform-pill').forEach(x => x.classList.remove('active'));
+      pill.classList.add('active');
+      currentPlatform = p;
+      renderPosts();
+    };
+    container.appendChild(pill);
+  });
+  currentPlatform = platforms[0];
+}
+
+function renderPosts() {
+  const list  = document.getElementById('post-list');
+  const posts = allStats[currentPlatform] || [];
+
+  if (!posts.length) {
+    list.innerHTML = '<div class="empty">Aucun post trouvé pour cette plateforme.</div>';
+    return;
+  }
+
+  list.innerHTML = posts.map(p => {
+    const eng  = p.taux_eng || 0;
+    const cls  = eng >= 6 ? 'eng-high' : eng >= 3 ? 'eng-mid' : 'eng-low';
+    const color = PLATFORM_COLORS[currentPlatform] || '#7c6aff';
+    return `
+      <div class="post-row">
+        <div class="post-dot" style="background:${color}"></div>
+        <div class="post-info">
+          <div class="post-title">${p.titre || '—'}</div>
+          <div class="post-meta">${p.date} · ${p.format} · ${fmt(p.vues)} vues</div>
+        </div>
+        <div class="post-eng ${cls}">${eng.toFixed(1)}%</div>
+      </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════
+//  SWIPE PAGE
+// ══════════════════════════════════════════════
+function renderIdea() {
+  if (ideaIndex >= ideas.length) {
+    document.getElementById('idea-card').innerHTML =
+      '<div class="empty" style="padding:40px 0">🎉 Toutes les idées ont été traitées !</div>';
+    document.getElementById('swipe-counter').textContent = 'Liste terminée';
+    return;
+  }
+
+  const idea = ideas[ideaIndex];
+  document.getElementById('swipe-counter').textContent = `${ideaIndex+1} / ${ideas.length}`;
+  document.getElementById('idea-tag').textContent       = idea.format;
+  document.getElementById('idea-title').textContent     = idea.title;
+  document.getElementById('idea-desc').textContent      = idea.desc;
+  document.getElementById('idea-viral').textContent     = idea.viral + '/10';
+  document.getElementById('idea-effort').textContent    = idea.effort + '/10';
+  const roi = idea.effort > 0 ? (idea.viral / idea.effort).toFixed(1) : '—';
+  document.getElementById('idea-roi').textContent       = roi;
+}
+
+async function swipe(decision) {
+  if (ideaIndex >= ideas.length) return;
+  const idea = ideas[ideaIndex];
+  const card = document.getElementById('idea-card');
+
+  card.classList.add(decision === 'approve' ? 'swipe-right' : 'swipe-left');
+
+  // Send to backend
+  try {
+    await fetch(`${API}/api/ideas/swipe`, {
+      method: 'POST',
+      headers: { 'X-API-Key': currentKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea: idea.title, decision, creator: 'me', format: idea.format,
+                             viral_score: idea.viral, effort: idea.effort })
+    });
+  } catch(e) {}
+
+  setTimeout(() => {
+    card.classList.remove('swipe-right', 'swipe-left');
+    ideaIndex++;
+    renderIdea();
+  }, 350);
+}
+
+function addIdeaForm() {
+  const form = document.getElementById('add-idea-form');
+  form.classList.toggle('hidden');
+}
+
+function saveNewIdea() {
+  const title  = document.getElementById('new-idea-title').value.trim();
+  const desc   = document.getElementById('new-idea-desc').value.trim();
+  const format = document.getElementById('new-idea-format').value;
+  const viral  = parseInt(document.getElementById('new-idea-viral').value) || 5;
+  const effort = parseInt(document.getElementById('new-idea-effort').value) || 5;
+
+  if (!title) return;
+
+  ideas.push({ title, desc, format, viral, effort });
+  document.getElementById('add-idea-form').classList.add('hidden');
+  document.getElementById('new-idea-title').value = '';
+  document.getElementById('new-idea-desc').value  = '';
+
+  if (ideaIndex >= ideas.length - 1) {
+    ideaIndex = ideas.length - 1;
+  }
+  renderIdea();
+}
+
+// ══════════════════════════════════════════════
+//  MANUAL STATS FORM
+// ══════════════════════════════════════════════
+async function submitManualStats() {
+  const data = {
+    creator:   'me',
+    platform:  document.getElementById('form-platform').value,
+    date:      document.getElementById('form-date').value,
+    titre:     document.getElementById('form-title').value,
+    format:    document.getElementById('form-format').value,
+    views:     parseInt(document.getElementById('form-views').value)    || 0,
+    reach:     parseInt(document.getElementById('form-reach').value)    || 0,
+    likes:     parseInt(document.getElementById('form-likes').value)    || 0,
+    comments:  parseInt(document.getElementById('form-comments').value) || 0,
+    shares:    parseInt(document.getElementById('form-shares').value)   || 0,
+    saves:     parseInt(document.getElementById('form-saves').value)    || 0,
+    followers: parseInt(document.getElementById('form-followers').value)|| 0,
+  };
+
+  try {
+    await fetch(`${API}/api/stats/manual`, {
+      method: 'POST',
+      headers: { 'X-API-Key': currentKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch(e) {}
+
+  const msg = document.getElementById('form-success');
+  msg.style.display = 'block';
+  setTimeout(() => msg.style.display = 'none', 3000);
+
+  // Reset numeric fields
+  ['form-views','form-reach','form-likes','form-comments','form-shares','form-saves'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+}
+
+// ══════════════════════════════════════════════
+//  ADMIN PAGE
+// ══════════════════════════════════════════════
+async function loadAdminData() {
+  try {
+    const [creatorsResp, dashResp] = await Promise.all([
+      fetch(`${API}/api/admin/creators`,  { headers: { 'X-API-Key': currentKey } }),
+      fetch(`${API}/api/admin/dashboard`, { headers: { 'X-API-Key': currentKey } }),
+    ]);
+    const creators = (await creatorsResp.json()).creators || [];
+    const dash     = await dashResp.json();
+    renderCreators(creators);
+    renderAdminStats(dash);
+  } catch(e) {
+    renderCreators(['Alice', 'Bob', 'Charlie']);
+    renderAdminStats(null);
+  }
+}
+
+function renderCreators(creators) {
+  const list = document.getElementById('creator-list');
+  const badges = ['badge-good','badge-ok','badge-low'];
+  const labels = ['🔥 Top','📈 Ok','💤 Faible'];
+
+  list.innerHTML = creators.map((c, i) => `
+    <div class="creator-row">
+      <div class="creator-avatar">${c[0].toUpperCase()}</div>
+      <div class="creator-info">
+        <div class="creator-name">${c}</div>
+        <div class="creator-sub">5 plateformes · actif</div>
+      </div>
+      <div class="creator-badge ${badges[i % 3]}">${labels[i % 3]}</div>
+    </div>`).join('');
+}
+
+function renderAdminStats(dash) {
+  let totalViews = 0, engSum = 0, engCount = 0, topPlatform = '—';
+  if (dash && dash.platforms) {
+    let maxViews = 0;
+    for (const [plat, d] of Object.entries(dash.platforms)) {
+      totalViews += d.vues_moy || 0;
+      if (d.engagement_moy) { engSum += d.engagement_moy; engCount++; }
+      if ((d.vues_moy || 0) > maxViews) { maxViews = d.vues_moy; topPlatform = platformEmoji(plat) + ' ' + plat; }
+    }
+  }
+  document.getElementById('admin-views').textContent        = fmt(totalViews) || '—';
+  document.getElementById('admin-eng').textContent          = engCount ? (engSum/engCount).toFixed(1)+'%' : '—';
+  document.getElementById('admin-top-platform').textContent = topPlatform;
+  document.getElementById('admin-creators').textContent     = document.querySelectorAll('.creator-row').length || '—';
+}
+
+async function triggerSync() {
+  const btn = document.querySelector('.sync-btn');
+  btn.textContent = '⏳ Sync…';
+  btn.disabled = true;
+  try {
+    const resp = await fetch(`${API}/api/admin/sync`, {
+      method: 'POST',
+      headers: { 'X-API-Key': currentKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creator: 'all' })
+    });
+    const data = await resp.json();
+    document.getElementById('sync-text').textContent =
+      `Synced : ${data.synced?.total || 0} lignes ajoutées`;
+    loadStats();
+  } catch(e) {
+    document.getElementById('sync-text').textContent = 'Erreur de connexion';
+  }
+  btn.textContent = 'Sync APIs';
+  btn.disabled = false;
+}
+
+// ══════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════
+function fmt(n) {
+  if (!n) return '0';
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000)    return (n/1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function platformEmoji(p) {
+  return { Instagram:'📸', TikTok:'🎵', YouTube:'▶️', Facebook:'👍', Snapchat:'👻' }[p] || '📱';
+}
+</script>
+</body>
+</html>
