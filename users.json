@@ -1,20 +1,23 @@
 [
   {
     "email": "admin@contenttracker.com",
-    "password_hash": "pbkdf2:sha256:1000000$FRAhIhTR3idUrtKi$529545749a8236f2b431e6eec9731c03e18a32d68894828bcbe269a20068a7d0",
+    "password_hash": "scrypt:32768:8:1$0b7QKPjhtNocGnpO$bdc45ee9059584bb09e31987b3f1bb4c1a92493efeaf7260beb701dc5b98fd1036dd6b9429b43c935d161a00b18976b00708c5256eaec32d37b57d0c555075ba",
     "role": "admin",
-    "creator_name": null
+    "creator_name": null,
+    "verified": true
   },
   {
     "email": "maina@contenttracker.com",
-    "password_hash": "pbkdf2:sha256:1000000$y0HmwpJtD0jYCpyj$cfd0fa9751be3e12b55a59f4b32e7dd86ea8afece45bd74bb7a22191826bf965",
+    "password_hash": "scrypt:32768:8:1$pR4GSiF7zFeUMIsN$ee0a4ee0dc06246a54b281c729af75cdaa3c7ca4f67614e8c9c5e7eb6e7db82ccf178fc148290f453ff0e0146ecb98951f977ccb6e9beff47f7901f8bc11d37e",
     "role": "creator",
-    "creator_name": "maina"
+    "creator_name": "maina",
+    "verified": true
   },
   {
     "email": "titi@contenttracker.com",
-    "password_hash": "pbkdf2:sha256:1000000$FKtgaP0fuSE39d1X$73c84059fb363ac5980841a81920d8767d891fca2aa776b0120d7ad79166fc8c",
+    "password_hash": "scrypt:32768:8:1$kpmlr9hG03DCdO6W$221cae10d51d6682696566d8c4aea32d6db5a8401bdd1432fd5ea98533f951cab6d184f89ffe4d9242020fb638cd83fbd4d6b97f5160bd1580b14a2988d0bbe0",
     "role": "creator",
-    "creator_name": "titi"
+    "creator_name": "titi",
+    "verified": true
   }
 ]
