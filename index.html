@@ -1036,28 +1036,28 @@
     }
 
 
-    // 🎨 Applique les infos utilisateur à l’UI
+    // 🎨 Applique les infos utilisateur à l'UI
     function applyUserToUI() {
-      document.getElementById(‘login-screen’).style.display = ‘none’;
-      document.getElementById(‘app’).style.display = ‘flex’;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
 
-      const roleEl = document.getElementById(‘topbar-role’);
+      const roleEl = document.getElementById('topbar-role');
 
       // Rempli page Réglages
-      document.getElementById(‘settings-email’).textContent     = currentUser?.email || ‘—‘;
-      document.getElementById(‘settings-role’).textContent      = currentRole === ‘admin’ ? ‘👑 Admin’ : ‘✏️ Créateur’;
-      document.getElementById(‘settings-email-sub’).textContent = currentUser?.email || ‘’;
+      document.getElementById('settings-email').textContent     = currentUser?.email || '—';
+      document.getElementById('settings-role').textContent      = currentRole === 'admin' ? '👑 Admin' : '✏️ Créateur';
+      document.getElementById('settings-email-sub').textContent = currentUser?.email || '';
 
-      if (currentRole === ‘admin’) {
-        roleEl.textContent = ‘👑 Admin’;
-        document.getElementById(‘nav-creator’).classList.add(‘hidden’);
-        document.getElementById(‘nav-admin’).classList.remove(‘hidden’);
-        document.getElementById(‘page-admin’).classList.remove(‘hidden’);
+      if (currentRole === 'admin') {
+        roleEl.textContent = '👑 Admin';
+        document.getElementById('nav-creator').classList.add('hidden');
+        document.getElementById('nav-admin').classList.remove('hidden');
+        document.getElementById('page-admin').classList.remove('hidden');
         loadAdminData();
       } else {
-        roleEl.textContent = ‘✏️ Créateur’;
+        roleEl.textContent = '✏️ Créateur';
         if (currentUser?.creator_name) {
-          document.getElementById(‘topbar-title’).textContent =
+          document.getElementById('topbar-title').textContent =
             `Content Tracker · ${currentUser.creator_name}`;
         }
       }
