@@ -463,12 +463,18 @@
   </div>
 
   <div class="login-card">
-    <div>
-      <div class="field-label">Clé d'accès</div>
-      <input type="password" id="login-key" placeholder="Entre ta clé…" autocomplete="off">
-    </div>
-    <button class="btn btn-primary" onclick="handleLogin()">Continuer</button>
-    <div class="login-error" id="login-error">Clé incorrecte, réessaie.</div>
+      <div>
+        <div class="field-label">Email</div>
+        <input type="email" id="login-email" placeholder="ton@email.com" autocomplete="email">
+      </div>
+
+      <div>
+        <div class="field-label">Mot de passe</div>
+        <input type="password" id="login-password" placeholder="Entre ton mot de passe" autocomplete="current-password">
+      </div>
+
+      <button class="btn btn-primary" onclick="handleLogin()">Continuer</button>
+      <div class="login-error" id="login-error">Identifiants incorrects, réessaie.</div>
   </div>
 </div>
 
@@ -754,15 +760,12 @@
 // ══════════════════════════════════════════════
 //  CONFIG
 // ══════════════════════════════════════════════
-const API       = 'https://prune-humorous-outshoot.ngrok-free.dev';  // ← change en prod par ton URL Render
-const ADMIN_KEY = 'admin-secret-123';        // ← même valeur que dans .env
-const CREATOR_KEY = 'creator-secret-456';    // ← même valeur que dans .env
+const API = 'https://content-tracker-8q1h.onrender.com';
 
 // ══════════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════════
 let currentRole = null;
-let currentKey  = null;
 let currentPlatform = 'Instagram';
 let allStats    = {};
 let ideas       = [
@@ -781,48 +784,104 @@ const PLATFORM_COLORS = {
 // ══════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════
-function handleLogin() {
-  const key = document.getElementById('login-key').value.trim();
-  if (key === ADMIN_KEY) {
-    login('admin', key);
-  } else if (key === CREATOR_KEY) {
-    login('creator', key);
-  } else {
-    document.getElementById('login-error').style.display = 'block';
+async function handleLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errorEl = document.getElementById('login-error');
+
+  errorEl.style.display = 'none';
+
+  try {
+    const resp = await fetch(`${API}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      errorEl.textContent = data.error || 'Erreur de connexion';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    currentRole = data.user.role;
+
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+
+    const roleEl = document.getElementById('topbar-role');
+    roleEl.textContent = currentRole === 'admin' ? '👑 Admin' : '✏️ Créateur';
+    if (currentRole === 'admin') roleEl.classList.add('admin');
+
+    document.getElementById('stats-greeting').textContent =
+      currentRole === 'admin' ? 'Vue globale' : 'Tes stats';
+
+    if (currentRole === 'admin') {
+      document.getElementById('nav-creator').classList.add('hidden');
+      document.getElementById('nav-admin').classList.remove('hidden');
+      document.getElementById('page-admin').classList.remove('hidden');
+      loadAdminData();
+    }
+
+    document.getElementById('form-date').valueAsDate = new Date();
+
+    loadStats();
+    renderIdea();
+
+  } catch (e) {
+    errorEl.textContent = 'Erreur serveur';
+    errorEl.style.display = 'block';
   }
 }
 
-document.getElementById('login-key').addEventListener('keydown', e => {
-  if (e.key === 'Enter') handleLogin();
+async function checkSessionOnLoad() {
+  try {
+    const resp = await fetch(`${API}/api/auth/me`, {
+      credentials: 'include'
+    });
+
+    if (!resp.ok) return;
+
+    const user = await resp.json();
+    currentRole = user.role;
+
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+
+    const roleEl = document.getElementById('topbar-role');
+    roleEl.textContent = currentRole === 'admin' ? '👑 Admin' : '✏️ Créateur';
+    if (currentRole === 'admin') roleEl.classList.add('admin');
+
+    document.getElementById('stats-greeting').textContent =
+      currentRole === 'admin' ? 'Vue globale' : 'Tes stats';
+
+    if (currentRole === 'admin') {
+      document.getElementById('nav-creator').classList.add('hidden');
+      document.getElementById('nav-admin').classList.remove('hidden');
+      document.getElementById('page-admin').classList.remove('hidden');
+      loadAdminData();
+    }
+
+    document.getElementById('form-date').valueAsDate = new Date();
+
+    loadStats();
+    renderIdea();
+  } catch (e) {}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  checkSessionOnLoad();
+
+  const pwd = document.getElementById('login-password');
+  if (pwd) {
+    pwd.addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleLogin();
+    });
+  }
 });
-
-function login(role, key) {
-  currentRole = role;
-  currentKey  = key;
-
-  document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'flex';
-
-  const roleEl = document.getElementById('topbar-role');
-  roleEl.textContent = role === 'admin' ? '👑 Admin' : '✏️ Créateur';
-  if (role === 'admin') roleEl.classList.add('admin');
-
-  document.getElementById('stats-greeting').textContent =
-    role === 'admin' ? 'Vue globale' : 'Tes stats';
-
-  if (role === 'admin') {
-    document.getElementById('nav-creator').classList.add('hidden');
-    document.getElementById('nav-admin').classList.remove('hidden');
-    document.getElementById('page-admin').classList.remove('hidden');
-    loadAdminData();
-  }
-
-  // Set today's date in form
-  document.getElementById('form-date').valueAsDate = new Date();
-
-  loadStats();
-  renderIdea();
-}
 
 // ══════════════════════════════════════════════
 //  NAVIGATION
@@ -842,9 +901,9 @@ function showPage(name, btn, navType) {
 // ══════════════════════════════════════════════
 async function loadStats() {
   try {
-    const resp = await fetch(`${API}/api/stats/creator`, {
-      headers: { 'X-API-Key': currentKey }
-    });
+      const resp = await fetch(`${API}/api/stats/maina`, {
+        credentials: 'include'
+      });
     const data = await resp.json();
     allStats = data.stats || {};
     renderSummary();
@@ -968,9 +1027,10 @@ async function swipe(decision) {
 
   // Send to backend
   try {
-    await fetch(`${API}/api/ideas/swipe`, {
-      method: 'POST',
-      headers: { 'X-API-Key': currentKey, 'Content-Type': 'application/json' },
+      await fetch(`${API}/api/ideas/swipe`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idea: idea.title, decision, creator: 'me', format: idea.format,
                              viral_score: idea.viral, effort: idea.effort })
     });
@@ -1030,7 +1090,8 @@ async function submitManualStats() {
   try {
     await fetch(`${API}/api/stats/manual`, {
       method: 'POST',
-      headers: { 'X-API-Key': currentKey, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(data)
     });
   } catch(e) {}
@@ -1051,8 +1112,13 @@ async function submitManualStats() {
 async function loadAdminData() {
   try {
     const [creatorsResp, dashResp] = await Promise.all([
-      fetch(`${API}/api/admin/creators`,  { headers: { 'X-API-Key': currentKey } }),
-      fetch(`${API}/api/admin/dashboard`, { headers: { 'X-API-Key': currentKey } }),
+                                                        fetch(`${API}/api/admin/creators`, {
+                                                          credentials: 'include'
+                                                        }),
+                                                        
+                                                        fetch(`${API}/api/admin/dashboard`, {
+                                                          credentials: 'include'
+                                                        }),
     ]);
     const creators = (await creatorsResp.json()).creators || [];
     const dash     = await dashResp.json();
@@ -1103,7 +1169,8 @@ async function triggerSync() {
   try {
     const resp = await fetch(`${API}/api/admin/sync`, {
       method: 'POST',
-      headers: { 'X-API-Key': currentKey, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ creator: 'all' })
     });
     const data = await resp.json();

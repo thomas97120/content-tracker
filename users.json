@@ -1,0 +1,20 @@
+[
+  {
+    "email": "admin@contenttracker.com",
+    "password_hash": "pbkdf2:sha256:1000000$FRAhIhTR3idUrtKi$529545749a8236f2b431e6eec9731c03e18a32d68894828bcbe269a20068a7d0",
+    "role": "admin",
+    "creator_name": null
+  },
+  {
+    "email": "maina@contenttracker.com",
+    "password_hash": "pbkdf2:sha256:1000000$y0HmwpJtD0jYCpyj$cfd0fa9751be3e12b55a59f4b32e7dd86ea8afece45bd74bb7a22191826bf965",
+    "role": "creator",
+    "creator_name": "maina"
+  },
+  {
+    "email": "titi@contenttracker.com",
+    "password_hash": "pbkdf2:sha256:1000000$FKtgaP0fuSE39d1X$73c84059fb363ac5980841a81920d8767d891fca2aa776b0120d7ad79166fc8c",
+    "role": "creator",
+    "creator_name": "titi"
+  }
+]
