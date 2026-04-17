@@ -68,22 +68,24 @@ def get_youtube_stats(creds):
 #  INSTAGRAM
 # ─────────────────────────────────────────────
 
-def get_instagram_stats():
-    if not META_ACCESS_TOKEN or not INSTAGRAM_BUSINESS_ID:
+def get_instagram_stats(token=None, business_id=None):
+    token       = token       or META_ACCESS_TOKEN
+    business_id = business_id or INSTAGRAM_BUSINESS_ID
+    if not token or not business_id:
         print("Instagram : META_ACCESS_TOKEN ou INSTAGRAM_BUSINESS_ID manquant")
         return []
     try:
         BASE   = "https://graph.facebook.com/v19.0"
-        params = {"access_token": META_ACCESS_TOKEN}
+        params = {"access_token": token}
 
         account_resp = requests.get(
-            f"{BASE}/{INSTAGRAM_BUSINESS_ID}",
+            f"{BASE}/{business_id}",
             params={**params, "fields": "followers_count"}
         ).json()
         followers = account_resp.get("followers_count", 0)
 
         media_resp = requests.get(
-            f"{BASE}/{INSTAGRAM_BUSINESS_ID}/media",
+            f"{BASE}/{business_id}/media",
             params={**params, "fields": "id,caption,media_type,timestamp", "limit": DAYS_TO_FETCH * 3}
         ).json()
 
@@ -129,22 +131,24 @@ def get_instagram_stats():
 #  FACEBOOK
 # ─────────────────────────────────────────────
 
-def get_facebook_stats():
-    if not META_ACCESS_TOKEN or not FACEBOOK_PAGE_ID:
+def get_facebook_stats(token=None, page_id=None):
+    token   = token   or META_ACCESS_TOKEN
+    page_id = page_id or FACEBOOK_PAGE_ID
+    if not token or not page_id:
         print("Facebook : META_ACCESS_TOKEN ou FACEBOOK_PAGE_ID manquant")
         return []
     try:
         BASE   = "https://graph.facebook.com/v19.0"
-        params = {"access_token": META_ACCESS_TOKEN}
+        params = {"access_token": token}
 
         page_resp = requests.get(
-            f"{BASE}/{FACEBOOK_PAGE_ID}",
+            f"{BASE}/{page_id}",
             params={**params, "fields": "fan_count"}
         ).json()
         fans = page_resp.get("fan_count", 0)
 
         posts_resp = requests.get(
-            f"{BASE}/{FACEBOOK_PAGE_ID}/posts",
+            f"{BASE}/{page_id}/posts",
             params={**params, "fields": "id,message,created_time", "limit": DAYS_TO_FETCH * 3}
         ).json()
 

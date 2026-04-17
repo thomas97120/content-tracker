@@ -459,22 +459,61 @@
   <div class="login-logo">
     <div class="logo-mark">📊</div>
     <h1>Content Tracker</h1>
-    <p>Connecte-toi pour accéder à tes stats</p>
+    <p id="auth-subtitle">Connecte-toi pour accéder à tes stats</p>
   </div>
 
-  <div class="login-card">
-      <div>
-        <div class="field-label">Email</div>
-        <input type="email" id="login-email" placeholder="ton@email.com" autocomplete="email">
-      </div>
+  <!-- ── Connexion ── -->
+  <div class="login-card" id="panel-login">
+    <div>
+      <div class="field-label">Email</div>
+      <input type="email" id="login-email" placeholder="ton@email.com" autocomplete="email">
+    </div>
+    <div>
+      <div class="field-label">Mot de passe</div>
+      <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" onclick="handleLogin()">Continuer</button>
+    <div class="login-error" id="login-error"></div>
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted)">
+      <span style="cursor:pointer;text-decoration:underline" onclick="showPanel('forgot')">Mot de passe oublié ?</span>
+      <span style="cursor:pointer;text-decoration:underline" onclick="showPanel('register')">Créer un compte</span>
+    </div>
+  </div>
 
-      <div>
-        <div class="field-label">Mot de passe</div>
-        <input type="password" id="login-password" placeholder="Entre ton mot de passe" autocomplete="current-password">
-      </div>
+  <!-- ── Inscription ── -->
+  <div class="login-card hidden" id="panel-register">
+    <div>
+      <div class="field-label">Nom de créateur</div>
+      <input type="text" id="reg-name" placeholder="Ex: maina, léa…">
+    </div>
+    <div>
+      <div class="field-label">Email</div>
+      <input type="email" id="reg-email" placeholder="ton@email.com">
+    </div>
+    <div>
+      <div class="field-label">Mot de passe (8 car. min)</div>
+      <input type="password" id="reg-password" placeholder="Choisis un mot de passe">
+    </div>
+    <button class="btn btn-primary" onclick="handleRegister()">Créer mon compte</button>
+    <div class="login-error" id="reg-error"></div>
+    <div id="reg-success" class="success-msg"></div>
+    <div style="text-align:center;font-size:13px;color:var(--muted)">
+      <span style="cursor:pointer;text-decoration:underline" onclick="showPanel('login')">← Retour à la connexion</span>
+    </div>
+  </div>
 
-      <button class="btn btn-primary" onclick="handleLogin()">Continuer</button>
-      <div class="login-error" id="login-error">Identifiants incorrects, réessaie.</div>
+  <!-- ── Mot de passe oublié ── -->
+  <div class="login-card hidden" id="panel-forgot">
+    <div>
+      <div class="field-label">Ton email</div>
+      <input type="email" id="forgot-email" placeholder="ton@email.com">
+    </div>
+    <button class="btn btn-primary" onclick="handleForgot()">Envoyer le lien</button>
+    <div class="login-error" id="forgot-error"></div>
+    <div id="forgot-success" class="success-msg"></div>
+    <div style="text-align:center;font-size:13px;color:var(--muted)">
+      <span style="cursor:pointer;text-decoration:underline" onclick="showPanel('login')">← Retour</span>
+    </div>
   </div>
 </div>
 
@@ -725,8 +764,65 @@
     </div>
   </div>
 
+  <!-- ── PAGE : RÉGLAGES ── -->
+  <div class="page hidden" id="page-settings">
+    <div>
+      <div class="section-title">Réglages</div>
+      <div class="section-sub" id="settings-email-sub">Mon compte</div>
+    </div>
+
+    <!-- Clés API -->
+    <div class="card">
+      <div class="card-title">🔑 Mes clés API</div>
+      <div class="form-stack">
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:4px">
+          Tes tokens sont chiffrés côté serveur.<br>
+          Seuls les 4 premiers et derniers caractères sont affichés.
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">Meta Access Token (Instagram + Facebook)</div>
+          <input type="password" id="api-meta-token" placeholder="Colle ton token Meta ici…" autocomplete="off">
+          <div class="stat-sub" id="api-meta-token-current" style="margin-top:4px"></div>
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">Instagram Business ID</div>
+          <input type="text" id="api-ig-id" placeholder="Ex: 17841400000000000" autocomplete="off">
+          <div class="stat-sub" id="api-ig-id-current" style="margin-top:4px"></div>
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">Facebook Page ID</div>
+          <input type="text" id="api-fb-id" placeholder="Ex: 105000000000000" autocomplete="off">
+          <div class="stat-sub" id="api-fb-id-current" style="margin-top:4px"></div>
+        </div>
+
+        <button class="btn btn-primary" onclick="saveMyApis()">💾 Sauvegarder mes clés</button>
+        <div class="success-msg" id="api-success">✓ Clés sauvegardées !</div>
+        <div class="login-error" id="api-error"></div>
+      </div>
+    </div>
+
+    <!-- Infos compte -->
+    <div class="card">
+      <div class="card-title">👤 Mon compte</div>
+      <div class="form-stack">
+        <div class="stat-box">
+          <div class="stat-label">Email</div>
+          <div class="stat-value" style="font-size:16px" id="settings-email">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Rôle</div>
+          <div class="stat-value" style="font-size:16px" id="settings-role">—</div>
+        </div>
+        <button class="btn btn-secondary" onclick="handleLogout()" style="margin-top:4px">🚪 Déconnexion</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Bottom nav (creator) -->
-  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(3, 1fr)">
+  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(4, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this)">
       <span class="icon">📊</span>Stats
     </button>
@@ -736,10 +832,13 @@
     <button class="nav-btn" onclick="showPage('saisie', this)">
       <span class="icon">✏️</span>Saisie
     </button>
+    <button class="nav-btn" onclick="showPage('settings', this); loadMyApis()">
+      <span class="icon">⚙️</span>Réglages
+    </button>
   </nav>
 
   <!-- Bottom nav (admin) -->
-  <nav class="bottom-nav hidden" id="nav-admin" style="grid-template-columns: repeat(4, 1fr)">
+  <nav class="bottom-nav hidden" id="nav-admin" style="grid-template-columns: repeat(5, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this, 'admin')">
       <span class="icon">📊</span>Stats
     </button>
@@ -752,451 +851,686 @@
     <button class="nav-btn" onclick="showPage('saisie', this, 'admin')">
       <span class="icon">✏️</span>Saisie
     </button>
+    <button class="nav-btn" onclick="showPage('settings', this, 'admin'); loadMyApis()">
+      <span class="icon">⚙️</span>Réglages
+    </button>
   </nav>
 
 </div><!-- /#app -->
 
-<script>
-// ══════════════════════════════════════════════
-//  CONFIG
-// ══════════════════════════════════════════════
-const API = 'https://content-tracker-8q1h.onrender.com';
+    <script>
 
-// ══════════════════════════════════════════════
-//  STATE
-// ══════════════════════════════════════════════
-let currentRole = null;
-let currentPlatform = 'Instagram';
-let allStats    = {};
-let ideas       = [
-  { title: "Tutorial skincare 60s",    desc: "Routine matin en moins d'une minute, format Reel vertical.", format: "Reel",          viral: 8, effort: 3 },
-  { title: "Behind the scenes studio", desc: "Montrer les coulisses de ta création de contenu.", format: "Story",         viral: 6, effort: 2 },
-  { title: "Collab avec un créateur",  desc: "Duet TikTok ou collab Instagram avec quelqu'un de ta niche.", format: "TikTok",        viral: 9, effort: 6 },
-  { title: "Top 5 de la semaine",      desc: "Format listicle rapide sur les tendances de ta niche.", format: "YouTube Short", viral: 7, effort: 4 },
-];
-let ideaIndex = 0;
+    // ══════════════════════════════════════════════
+    // CONFIG
+    // URL de ton backend Render
+    // ══════════════════════════════════════════════
+    const API = 'https://content-tracker-8q1h.onrender.com';
 
-const PLATFORM_COLORS = {
-  Instagram: '#e1306c', TikTok: '#aaa', YouTube: '#ff0000',
-  Facebook: '#1877f2',  Snapchat: '#e6d800'
-};
 
-// ══════════════════════════════════════════════
-//  AUTH
-// ══════════════════════════════════════════════
-async function handleLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const errorEl = document.getElementById('login-error');
+    // ══════════════════════════════════════════════
+    // STATE GLOBAL (mémoire de l'app)
+    // ══════════════════════════════════════════════
+    let currentRole = null;     // "admin" ou "creator"
+    let currentUser = null;     // infos utilisateur (email + creator_name)
+    let currentPlatform = null; // plateforme sélectionnée (Instagram, TikTok…)
+    let allStats = {};          // toutes les stats récupérées depuis l'API
 
-  errorEl.style.display = 'none';
 
-  try {
-    const resp = await fetch(`${API}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ email, password })
-    });
+    // ══════════════════════════════════════════════
+    // UTILITAIRES
+    // ══════════════════════════════════════════════
 
-    const data = await resp.json();
-
-    if (!resp.ok) {
-      errorEl.textContent = data.error || 'Erreur de connexion';
-      errorEl.style.display = 'block';
-      return;
+    // Formate les nombres (1000 → 1K, 1M etc.)
+    function fmt(n) {
+      if (!n) return '0';
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return String(n);
     }
 
-    currentRole = data.user.role;
-
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-
-    const roleEl = document.getElementById('topbar-role');
-    roleEl.textContent = currentRole === 'admin' ? '👑 Admin' : '✏️ Créateur';
-    if (currentRole === 'admin') roleEl.classList.add('admin');
-
-    document.getElementById('stats-greeting').textContent =
-      currentRole === 'admin' ? 'Vue globale' : 'Tes stats';
-
-    if (currentRole === 'admin') {
-      document.getElementById('nav-creator').classList.add('hidden');
-      document.getElementById('nav-admin').classList.remove('hidden');
-      document.getElementById('page-admin').classList.remove('hidden');
-      loadAdminData();
+    // Ajoute emoji plateforme
+    function platformEmoji(p) {
+      return {
+        Instagram: '📸',
+        TikTok: '🎵',
+        YouTube: '▶️',
+        Facebook: '👍',
+        Snapchat: '👻'
+      }[p] || '📱';
     }
 
-    document.getElementById('form-date').valueAsDate = new Date();
 
-    loadStats();
-    renderIdea();
-
-  } catch (e) {
-    errorEl.textContent = 'Erreur serveur';
-    errorEl.style.display = 'block';
-  }
-}
-
-async function checkSessionOnLoad() {
-  try {
-    const resp = await fetch(`${API}/api/auth/me`, {
-      credentials: 'include'
-    });
-
-    if (!resp.ok) return;
-
-    const user = await resp.json();
-    currentRole = user.role;
-
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'flex';
-
-    const roleEl = document.getElementById('topbar-role');
-    roleEl.textContent = currentRole === 'admin' ? '👑 Admin' : '✏️ Créateur';
-    if (currentRole === 'admin') roleEl.classList.add('admin');
-
-    document.getElementById('stats-greeting').textContent =
-      currentRole === 'admin' ? 'Vue globale' : 'Tes stats';
-
-    if (currentRole === 'admin') {
-      document.getElementById('nav-creator').classList.add('hidden');
-      document.getElementById('nav-admin').classList.remove('hidden');
-      document.getElementById('page-admin').classList.remove('hidden');
-      loadAdminData();
-    }
-
-    document.getElementById('form-date').valueAsDate = new Date();
-
-    loadStats();
-    renderIdea();
-  } catch (e) {}
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  checkSessionOnLoad();
-
-  const pwd = document.getElementById('login-password');
-  if (pwd) {
-    pwd.addEventListener('keydown', e => {
-      if (e.key === 'Enter') handleLogin();
-    });
-  }
-});
-
-// ══════════════════════════════════════════════
-//  NAVIGATION
-// ══════════════════════════════════════════════
-function showPage(name, btn, navType) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  const target = document.getElementById('page-' + name);
-  if (target) target.classList.add('active');
-
-  const navId = navType === 'admin' ? 'nav-admin' : 'nav-creator';
-  document.querySelectorAll(`#${navId} .nav-btn`).forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-}
-
-// ══════════════════════════════════════════════
-//  STATS PAGE
-// ══════════════════════════════════════════════
-async function loadStats() {
-  try {
-      const resp = await fetch(`${API}/api/stats/maina`, {
-        credentials: 'include'
+    // ══════════════════════════════════════════════
+    // AUTH — PANELS (login / register / forgot)
+    // ══════════════════════════════════════════════
+    function showPanel(name) {
+      ['login','register','forgot'].forEach(p => {
+        document.getElementById('panel-' + p).classList.add('hidden');
       });
-    const data = await resp.json();
-    allStats = data.stats || {};
-    renderSummary();
-    renderPlatformPills();
-    renderPosts();
-  } catch(e) {
-    // Fallback demo data si le serveur n'est pas encore configuré
-    allStats = getDemoStats();
-    renderSummary();
-    renderPlatformPills();
-    renderPosts();
-  }
-}
+      document.getElementById('panel-' + name).classList.remove('hidden');
 
-function getDemoStats() {
-  return {
-    Instagram: [
-      { date:'2026-04-10', titre:'Reel cuisine italienne', format:'REEL', vues:12400, reach:9800, likes:843, commentaires:67, partages:124, sauvegardes:312, taux_eng:10.8, score:4.2 },
-      { date:'2026-04-12', titre:'Story Q&A followers',   format:'STORY', vues:3200,  reach:2900, likes:210, commentaires:88, partages:12,  sauvegardes:45,  taux_eng:11.1, score:1.4 },
-    ],
-    TikTok: [
-      { date:'2026-04-11', titre:'Tutorial maquillage 60s', format:'Vidéo courte', vues:48000, reach:44000, likes:3200, commentaires:412, partages:890, sauvegardes:1100, taux_eng:11.7, score:18.2 },
-    ],
-    YouTube: [
-      { date:'2026-04-09', titre:'Vlog semaine Paris',     format:'Video', vues:8400,  reach:8400, likes:420,  commentaires:95,  partages:67,  sauvegardes:0,   taux_eng:6.9,  score:3.1 },
-    ],
-    Facebook: [], Snapchat: [],
-  };
-}
-
-function renderSummary() {
-  let totalViews = 0, totalPosts = 0, totalFollowers = 0, engSum = 0, engCount = 0;
-  for (const [plat, posts] of Object.entries(allStats)) {
-    for (const p of posts) {
-      totalViews += p.vues || 0;
-      totalPosts++;
-      if (p.taux_eng) { engSum += p.taux_eng; engCount++; }
+      const subs = {
+        login:    'Connecte-toi pour accéder à tes stats',
+        register: 'Crée ton compte créateur',
+        forgot:   'Réinitialise ton mot de passe',
+      };
+      document.getElementById('auth-subtitle').textContent = subs[name];
     }
-  }
-  document.getElementById('total-views').textContent    = fmt(totalViews);
-  document.getElementById('avg-eng').textContent        = engCount ? (engSum/engCount).toFixed(1)+'%' : '—';
-  document.getElementById('total-followers').textContent = fmt(totalFollowers) || '—';
-  document.getElementById('total-posts').textContent    = totalPosts;
-}
 
-function renderPlatformPills() {
-  const container = document.getElementById('platform-pills');
-  container.innerHTML = '';
-  const platforms = Object.keys(allStats).filter(p => allStats[p].length > 0);
-  if (!platforms.length) platforms.push('Instagram');
+    async function handleRegister() {
+      const name     = document.getElementById('reg-name').value.trim();
+      const email    = document.getElementById('reg-email').value.trim();
+      const password = document.getElementById('reg-password').value;
+      const errEl    = document.getElementById('reg-error');
+      const okEl     = document.getElementById('reg-success');
+      errEl.style.display = 'none';
+      okEl.style.display  = 'none';
 
-  platforms.forEach((p, i) => {
-    const pill = document.createElement('div');
-    pill.className = 'platform-pill' + (i === 0 ? ' active' : '');
-    pill.dataset.p  = p;
-    pill.textContent = platformEmoji(p) + ' ' + p;
-    pill.onclick = () => {
-      document.querySelectorAll('.platform-pill').forEach(x => x.classList.remove('active'));
-      pill.classList.add('active');
-      currentPlatform = p;
-      renderPosts();
-    };
-    container.appendChild(pill);
-  });
-  currentPlatform = platforms[0];
-}
-
-function renderPosts() {
-  const list  = document.getElementById('post-list');
-  const posts = allStats[currentPlatform] || [];
-
-  if (!posts.length) {
-    list.innerHTML = '<div class="empty">Aucun post trouvé pour cette plateforme.</div>';
-    return;
-  }
-
-  list.innerHTML = posts.map(p => {
-    const eng  = p.taux_eng || 0;
-    const cls  = eng >= 6 ? 'eng-high' : eng >= 3 ? 'eng-mid' : 'eng-low';
-    const color = PLATFORM_COLORS[currentPlatform] || '#7c6aff';
-    return `
-      <div class="post-row">
-        <div class="post-dot" style="background:${color}"></div>
-        <div class="post-info">
-          <div class="post-title">${p.titre || '—'}</div>
-          <div class="post-meta">${p.date} · ${p.format} · ${fmt(p.vues)} vues</div>
-        </div>
-        <div class="post-eng ${cls}">${eng.toFixed(1)}%</div>
-      </div>`;
-  }).join('');
-}
-
-// ══════════════════════════════════════════════
-//  SWIPE PAGE
-// ══════════════════════════════════════════════
-function renderIdea() {
-  if (ideaIndex >= ideas.length) {
-    document.getElementById('idea-card').innerHTML =
-      '<div class="empty" style="padding:40px 0">🎉 Toutes les idées ont été traitées !</div>';
-    document.getElementById('swipe-counter').textContent = 'Liste terminée';
-    return;
-  }
-
-  const idea = ideas[ideaIndex];
-  document.getElementById('swipe-counter').textContent = `${ideaIndex+1} / ${ideas.length}`;
-  document.getElementById('idea-tag').textContent       = idea.format;
-  document.getElementById('idea-title').textContent     = idea.title;
-  document.getElementById('idea-desc').textContent      = idea.desc;
-  document.getElementById('idea-viral').textContent     = idea.viral + '/10';
-  document.getElementById('idea-effort').textContent    = idea.effort + '/10';
-  const roi = idea.effort > 0 ? (idea.viral / idea.effort).toFixed(1) : '—';
-  document.getElementById('idea-roi').textContent       = roi;
-}
-
-async function swipe(decision) {
-  if (ideaIndex >= ideas.length) return;
-  const idea = ideas[ideaIndex];
-  const card = document.getElementById('idea-card');
-
-  card.classList.add(decision === 'approve' ? 'swipe-right' : 'swipe-left');
-
-  // Send to backend
-  try {
-      await fetch(`${API}/api/ideas/swipe`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idea: idea.title, decision, creator: 'me', format: idea.format,
-                             viral_score: idea.viral, effort: idea.effort })
-    });
-  } catch(e) {}
-
-  setTimeout(() => {
-    card.classList.remove('swipe-right', 'swipe-left');
-    ideaIndex++;
-    renderIdea();
-  }, 350);
-}
-
-function addIdeaForm() {
-  const form = document.getElementById('add-idea-form');
-  form.classList.toggle('hidden');
-}
-
-function saveNewIdea() {
-  const title  = document.getElementById('new-idea-title').value.trim();
-  const desc   = document.getElementById('new-idea-desc').value.trim();
-  const format = document.getElementById('new-idea-format').value;
-  const viral  = parseInt(document.getElementById('new-idea-viral').value) || 5;
-  const effort = parseInt(document.getElementById('new-idea-effort').value) || 5;
-
-  if (!title) return;
-
-  ideas.push({ title, desc, format, viral, effort });
-  document.getElementById('add-idea-form').classList.add('hidden');
-  document.getElementById('new-idea-title').value = '';
-  document.getElementById('new-idea-desc').value  = '';
-
-  if (ideaIndex >= ideas.length - 1) {
-    ideaIndex = ideas.length - 1;
-  }
-  renderIdea();
-}
-
-// ══════════════════════════════════════════════
-//  MANUAL STATS FORM
-// ══════════════════════════════════════════════
-async function submitManualStats() {
-  const data = {
-    creator:   'me',
-    platform:  document.getElementById('form-platform').value,
-    date:      document.getElementById('form-date').value,
-    titre:     document.getElementById('form-title').value,
-    format:    document.getElementById('form-format').value,
-    views:     parseInt(document.getElementById('form-views').value)    || 0,
-    reach:     parseInt(document.getElementById('form-reach').value)    || 0,
-    likes:     parseInt(document.getElementById('form-likes').value)    || 0,
-    comments:  parseInt(document.getElementById('form-comments').value) || 0,
-    shares:    parseInt(document.getElementById('form-shares').value)   || 0,
-    saves:     parseInt(document.getElementById('form-saves').value)    || 0,
-    followers: parseInt(document.getElementById('form-followers').value)|| 0,
-  };
-
-  try {
-    await fetch(`${API}/api/stats/manual`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(data)
-    });
-  } catch(e) {}
-
-  const msg = document.getElementById('form-success');
-  msg.style.display = 'block';
-  setTimeout(() => msg.style.display = 'none', 3000);
-
-  // Reset numeric fields
-  ['form-views','form-reach','form-likes','form-comments','form-shares','form-saves'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-}
-
-// ══════════════════════════════════════════════
-//  ADMIN PAGE
-// ══════════════════════════════════════════════
-async function loadAdminData() {
-  try {
-    const [creatorsResp, dashResp] = await Promise.all([
-                                                        fetch(`${API}/api/admin/creators`, {
-                                                          credentials: 'include'
-                                                        }),
-                                                        
-                                                        fetch(`${API}/api/admin/dashboard`, {
-                                                          credentials: 'include'
-                                                        }),
-    ]);
-    const creators = (await creatorsResp.json()).creators || [];
-    const dash     = await dashResp.json();
-    renderCreators(creators);
-    renderAdminStats(dash);
-  } catch(e) {
-    renderCreators(['Alice', 'Bob', 'Charlie']);
-    renderAdminStats(null);
-  }
-}
-
-function renderCreators(creators) {
-  const list = document.getElementById('creator-list');
-  const badges = ['badge-good','badge-ok','badge-low'];
-  const labels = ['🔥 Top','📈 Ok','💤 Faible'];
-
-  list.innerHTML = creators.map((c, i) => `
-    <div class="creator-row">
-      <div class="creator-avatar">${c[0].toUpperCase()}</div>
-      <div class="creator-info">
-        <div class="creator-name">${c}</div>
-        <div class="creator-sub">5 plateformes · actif</div>
-      </div>
-      <div class="creator-badge ${badges[i % 3]}">${labels[i % 3]}</div>
-    </div>`).join('');
-}
-
-function renderAdminStats(dash) {
-  let totalViews = 0, engSum = 0, engCount = 0, topPlatform = '—';
-  if (dash && dash.platforms) {
-    let maxViews = 0;
-    for (const [plat, d] of Object.entries(dash.platforms)) {
-      totalViews += d.vues_moy || 0;
-      if (d.engagement_moy) { engSum += d.engagement_moy; engCount++; }
-      if ((d.vues_moy || 0) > maxViews) { maxViews = d.vues_moy; topPlatform = platformEmoji(plat) + ' ' + plat; }
+      try {
+        const resp = await fetch(`${API}/api/auth/register`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ creator_name: name, email, password })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          errEl.textContent   = data.error || 'Erreur';
+          errEl.style.display = 'block';
+        } else {
+          okEl.textContent   = data.message;
+          okEl.style.display = 'block';
+        }
+      } catch (e) {
+        errEl.textContent   = 'Erreur réseau';
+        errEl.style.display = 'block';
+      }
     }
-  }
-  document.getElementById('admin-views').textContent        = fmt(totalViews) || '—';
-  document.getElementById('admin-eng').textContent          = engCount ? (engSum/engCount).toFixed(1)+'%' : '—';
-  document.getElementById('admin-top-platform').textContent = topPlatform;
-  document.getElementById('admin-creators').textContent     = document.querySelectorAll('.creator-row').length || '—';
-}
 
-async function triggerSync() {
-  const btn = document.querySelector('.sync-btn');
-  btn.textContent = '⏳ Sync…';
-  btn.disabled = true;
-  try {
-    const resp = await fetch(`${API}/api/admin/sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ creator: 'all' })
+    async function handleForgot() {
+      const email = document.getElementById('forgot-email').value.trim();
+      const errEl = document.getElementById('forgot-error');
+      const okEl  = document.getElementById('forgot-success');
+      errEl.style.display = 'none';
+      okEl.style.display  = 'none';
+
+      try {
+        const resp = await fetch(`${API}/api/auth/forgot-password`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ email })
+        });
+        const data = await resp.json();
+        okEl.textContent   = data.message;
+        okEl.style.display = 'block';
+      } catch (e) {
+        errEl.textContent   = 'Erreur réseau';
+        errEl.style.display = 'block';
+      }
+    }
+
+    async function handleLogout() {
+      await fetch(`${API}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+      location.reload();
+    }
+
+
+    // ══════════════════════════════════════════════
+    // AUTH (LOGIN / SESSION)
+    // ══════════════════════════════════════════════
+
+    // 🔐 Quand l'utilisateur clique sur "Continuer"
+    async function handleLogin() {
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      const errorEl = document.getElementById('login-error');
+
+      errorEl.style.display = 'none';
+
+      try {
+        const resp = await fetch(`${API}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include', // 🔥 IMPORTANT → garde la session
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await resp.json();
+
+        // ❌ Mauvais login
+        if (!resp.ok) {
+          errorEl.textContent = data.error || 'Erreur de connexion';
+          errorEl.style.display = 'block';
+          return;
+        }
+
+        // ✅ Stock utilisateur en mémoire
+        currentRole = data.user.role;
+        currentUser = data.user;
+
+        applyUserToUI();
+
+      } catch (e) {
+        errorEl.textContent = 'Erreur serveur';
+        errorEl.style.display = 'block';
+      }
+    }
+
+
+    // 🔁 Vérifie si l'utilisateur est déjà connecté (cookie)
+    async function checkSessionOnLoad() {
+      try {
+        const resp = await fetch(`${API}/api/auth/me`, {
+          credentials: 'include'
+        });
+
+        if (!resp.ok) return;
+
+        const user = await resp.json();
+
+        currentRole = user.role;
+        currentUser = user;
+
+        applyUserToUI();
+
+      } catch (e) {}
+    }
+
+
+    // 🎨 Applique les infos utilisateur à l’UI
+    function applyUserToUI() {
+      document.getElementById(‘login-screen’).style.display = ‘none’;
+      document.getElementById(‘app’).style.display = ‘flex’;
+
+      const roleEl = document.getElementById(‘topbar-role’);
+
+      // Rempli page Réglages
+      document.getElementById(‘settings-email’).textContent     = currentUser?.email || ‘—‘;
+      document.getElementById(‘settings-role’).textContent      = currentRole === ‘admin’ ? ‘👑 Admin’ : ‘✏️ Créateur’;
+      document.getElementById(‘settings-email-sub’).textContent = currentUser?.email || ‘’;
+
+      if (currentRole === ‘admin’) {
+        roleEl.textContent = ‘👑 Admin’;
+        document.getElementById(‘nav-creator’).classList.add(‘hidden’);
+        document.getElementById(‘nav-admin’).classList.remove(‘hidden’);
+        document.getElementById(‘page-admin’).classList.remove(‘hidden’);
+        loadAdminData();
+      } else {
+        roleEl.textContent = ‘✏️ Créateur’;
+        if (currentUser?.creator_name) {
+          document.getElementById(‘topbar-title’).textContent =
+            `Content Tracker · ${currentUser.creator_name}`;
+        }
+      }
+
+      loadStats();
+    }
+
+
+    // ══════════════════════════════════════════════
+    // STATS
+    // ══════════════════════════════════════════════
+
+    async function loadStats() {
+      try {
+
+        // 🔥 Choix du bon créateur
+        let creatorName = 'maina';
+
+        if (currentRole === 'admin') {
+          creatorName = 'maina';
+        } else if (currentUser?.creator_name) {
+          creatorName = currentUser.creator_name;
+        }
+
+        const resp = await fetch(`${API}/api/stats/${creatorName}`, {
+          credentials: 'include'
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          throw new Error(data.error);
+        }
+
+        allStats = data.stats || {};
+
+        renderSummary();
+        renderPlatformPills();
+        renderPosts();
+
+      } catch (e) {
+        console.error(e);
+
+        // ⚠️ si erreur → pas de fake data
+        allStats = {};
+
+        renderSummary();
+        renderPlatformPills();
+        renderPosts();
+      }
+    }
+
+
+    // ══════════════════════════════════════════════
+    // RENDER DASHBOARD
+    // ══════════════════════════════════════════════
+
+    // 🔢 Stats globales
+    function renderSummary() {
+      let totalViews = 0;
+      let totalPosts = 0;
+      let engSum = 0;
+      let engCount = 0;
+      let totalFollowers = 0;
+
+      for (const posts of Object.values(allStats)) {
+        for (const p of posts) {
+          totalViews += p.vues || 0;
+          totalPosts++;
+          if (p.taux_eng) { engSum += p.taux_eng; engCount++; }
+        }
+        // Abonnés = dernière valeur connue par plateforme
+        if (posts.length) totalFollowers += posts[posts.length - 1].abonnes || 0;
+      }
+
+      document.getElementById('total-views').textContent     = totalViews ? fmt(totalViews) : '—';
+      document.getElementById('avg-eng').textContent         = engCount ? (engSum / engCount).toFixed(1) + '%' : '—';
+      document.getElementById('total-posts').textContent     = totalPosts || '—';
+      document.getElementById('total-followers').textContent = totalFollowers ? fmt(totalFollowers) : '—';
+    }
+
+
+    // 📱 Boutons plateformes
+    function renderPlatformPills() {
+      const container = document.getElementById('platform-pills');
+      container.innerHTML = '';
+
+      const platforms = Object.keys(allStats).filter(p => allStats[p]?.length);
+
+      if (!platforms.length) {
+        document.getElementById('post-list').innerHTML = '<div class="empty">Aucune donnée</div>';
+        return;
+      }
+
+      platforms.forEach((p, i) => {
+        const pill = document.createElement('div');
+        pill.className = 'platform-pill' + (i === 0 ? ' active' : '');
+        pill.dataset.p = p;
+        pill.textContent = platformEmoji(p) + ' ' + p;
+        pill.onclick = () => {
+          container.querySelectorAll('.platform-pill').forEach(el => el.classList.remove('active'));
+          pill.classList.add('active');
+          currentPlatform = p;
+          renderPosts();
+        };
+        container.appendChild(pill);
+      });
+
+      currentPlatform = platforms[0];
+    }
+
+
+    // Couleur selon taux d'engagement
+    function engClass(v) {
+      if (!v) return 'eng-low';
+      if (v >= 5) return 'eng-high';
+      if (v >= 2) return 'eng-mid';
+      return 'eng-low';
+    }
+
+
+    // 📊 Liste des posts
+    function renderPosts() {
+      const list = document.getElementById('post-list');
+
+      if (!currentPlatform) {
+        list.innerHTML = '<div class="empty">Aucune donnée</div>';
+        return;
+      }
+
+      const posts = allStats[currentPlatform] || [];
+
+      if (!posts.length) {
+        list.innerHTML = '<div class="empty">Aucun post</div>';
+        return;
+      }
+
+      const platformColors = {
+        Instagram: 'var(--ig)', TikTok: 'var(--tt)', YouTube: 'var(--yt)',
+        Facebook: 'var(--fb)', Snapchat: 'var(--snap)'
+      };
+      const dotColor = platformColors[currentPlatform] || 'var(--accent)';
+
+      list.innerHTML = posts.map(p => {
+        const eng = p.taux_eng || 0;
+        return `
+          <div class="post-row">
+            <div class="post-dot" style="background:${dotColor}"></div>
+            <div class="post-info">
+              <div class="post-title">${p.titre || '—'}</div>
+              <div class="post-meta">${p.date || ''} · ${fmt(p.vues)} vues · ${fmt(p.likes)} likes</div>
+            </div>
+            <div class="post-eng ${engClass(eng)}">${eng.toFixed(1)}%</div>
+          </div>`;
+      }).join('');
+    }
+
+
+    // ══════════════════════════════════════════════
+    // NAVIGATION
+    // ══════════════════════════════════════════════
+    function showPage(pageId, btn, navType) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      const target = document.getElementById('page-' + pageId);
+      if (target) target.classList.add('active');
+
+      const nav = navType === 'admin'
+        ? document.getElementById('nav-admin')
+        : document.getElementById('nav-creator');
+      nav.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      if (pageId === 'swipe') renderNextIdea();
+    }
+
+
+    // ══════════════════════════════════════════════
+    // ADMIN
+    // ══════════════════════════════════════════════
+    async function loadAdminData() {
+      try {
+        const [creatorsResp, dashResp] = await Promise.all([
+          fetch(`${API}/api/admin/creators`, { credentials: 'include' }),
+          fetch(`${API}/api/admin/dashboard`, { credentials: 'include' })
+        ]);
+        const creatorsData = await creatorsResp.json();
+        const dashData     = await dashResp.json();
+
+        // Liste des créateurs
+        const list = document.getElementById('creator-list');
+        const creators = creatorsData.creators || [];
+        list.innerHTML = creators.length
+          ? creators.map(c => `
+              <div class="creator-row">
+                <div class="creator-avatar">${c[0].toUpperCase()}</div>
+                <div class="creator-info">
+                  <div class="creator-name">${c}</div>
+                </div>
+              </div>`).join('')
+          : '<div class="empty">Aucun créateur</div>';
+
+        // Stats globales
+        const platforms = dashData.platforms || {};
+        let totalViews = 0, engSum = 0, engCount = 0, topPlatform = '—', topViews = 0;
+
+        for (const [name, s] of Object.entries(platforms)) {
+          const pv = (s.vues_moy || 0) * (s.posts || 0);
+          totalViews += pv;
+          if (s.engagement_moy) { engSum += s.engagement_moy; engCount++; }
+          if (pv > topViews) { topViews = pv; topPlatform = name; }
+        }
+
+        document.getElementById('admin-views').textContent        = fmt(totalViews) || '—';
+        document.getElementById('admin-eng').textContent          = engCount ? (engSum / engCount).toFixed(1) + '%' : '—';
+        document.getElementById('admin-top-platform').textContent = topPlatform;
+        document.getElementById('admin-creators').textContent     = Object.keys(platforms).length || '—';
+
+        if (dashData.updated_at) {
+          document.getElementById('sync-text').textContent =
+            'Mis à jour le ' + new Date(dashData.updated_at).toLocaleString('fr-FR');
+        }
+      } catch (e) {
+        console.error('Erreur données admin :', e);
+      }
+    }
+
+    async function triggerSync() {
+      const btn  = document.querySelector('.sync-btn');
+      const text = document.getElementById('sync-text');
+      btn.disabled    = true;
+      btn.textContent = '…';
+      text.textContent = 'Synchronisation en cours…';
+
+      try {
+        const resp = await fetch(`${API}/api/admin/sync`, { method: 'POST', credentials: 'include' });
+        const data = await resp.json();
+        if (resp.ok) {
+          text.textContent = `Sync OK — ${data.synced?.total || 0} entrées importées`;
+          loadAdminData();
+          loadStats();
+        } else {
+          text.textContent = 'Erreur : ' + (data.error || 'inconnue');
+        }
+      } catch (e) {
+        text.textContent = 'Erreur réseau';
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = 'Sync APIs';
+      }
+    }
+
+
+    // ══════════════════════════════════════════════
+    // SAISIE MANUELLE
+    // ══════════════════════════════════════════════
+    async function submitManualStats() {
+      const data = {
+        creator:   currentUser?.creator_name || '',
+        platform:  document.getElementById('form-platform').value,
+        date:      document.getElementById('form-date').value,
+        titre:     document.getElementById('form-title').value,
+        format:    document.getElementById('form-format').value,
+        views:     parseInt(document.getElementById('form-views').value)     || 0,
+        reach:     parseInt(document.getElementById('form-reach').value)     || 0,
+        likes:     parseInt(document.getElementById('form-likes').value)     || 0,
+        comments:  parseInt(document.getElementById('form-comments').value)  || 0,
+        shares:    parseInt(document.getElementById('form-shares').value)    || 0,
+        saves:     parseInt(document.getElementById('form-saves').value)     || 0,
+        followers: parseInt(document.getElementById('form-followers').value) || 0,
+      };
+
+      const successEl = document.getElementById('form-success');
+      successEl.style.display = 'none';
+
+      if (!data.date) { alert('Indique une date'); return; }
+
+      try {
+        const resp = await fetch(`${API}/api/stats/manual`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(data)
+        });
+        const result = await resp.json();
+        if (resp.ok && result.success) {
+          successEl.style.display = 'block';
+          ['form-title','form-views','form-reach','form-likes',
+           'form-comments','form-shares','form-saves','form-followers'].forEach(id => {
+            document.getElementById(id).value = '';
+          });
+        } else {
+          alert(result.error || 'Erreur lors de l\'enregistrement');
+        }
+      } catch (e) {
+        alert('Erreur réseau');
+      }
+    }
+
+
+    // ══════════════════════════════════════════════
+    // SWIPE IDEAS
+    // ══════════════════════════════════════════════
+    let ideas = JSON.parse(localStorage.getItem('content_ideas') || '[]');
+
+    function saveIdeas() {
+      localStorage.setItem('content_ideas', JSON.stringify(ideas));
+    }
+
+    function renderNextIdea() {
+      const pending = ideas.filter(i => !i.decided);
+      const counter = document.getElementById('swipe-counter');
+      const card    = document.getElementById('idea-card');
+      const btns    = document.querySelector('.swipe-btns');
+
+      if (!pending.length) {
+        counter.textContent   = 'Aucune idée en attente — ajoutes-en une !';
+        card.style.display    = 'none';
+        btns.style.display    = 'none';
+        return;
+      }
+
+      card.style.display = '';
+      btns.style.display = '';
+      card.classList.remove('swipe-right', 'swipe-left');
+
+      const idea = pending[0];
+      counter.textContent = `${pending.length} idée${pending.length > 1 ? 's' : ''} en attente`;
+
+      document.getElementById('idea-title').textContent  = idea.title;
+      document.getElementById('idea-desc').textContent   = idea.desc || '';
+      document.getElementById('idea-tag').textContent    = idea.format || 'Contenu';
+      document.getElementById('idea-viral').textContent  = idea.viral  || '—';
+      document.getElementById('idea-effort').textContent = idea.effort || '—';
+      document.getElementById('idea-roi').textContent    =
+        (idea.viral && idea.effort) ? (idea.viral / idea.effort).toFixed(1) : '—';
+    }
+
+    async function swipe(decision) {
+      const pending = ideas.filter(i => !i.decided);
+      if (!pending.length) return;
+
+      const idea = pending[0];
+      const card = document.getElementById('idea-card');
+
+      card.classList.add(decision === 'approve' ? 'swipe-right' : 'swipe-left');
+      idea.decided = decision;
+      saveIdeas();
+
+      try {
+        await fetch(`${API}/api/ideas/swipe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            idea:        idea.title,
+            decision,
+            creator:     currentUser?.creator_name || '',
+            format:      idea.format || '',
+            viral_score: idea.viral  || '',
+            effort:      idea.effort || ''
+          })
+        });
+      } catch (e) {}
+
+      setTimeout(renderNextIdea, 350);
+    }
+
+    function addIdeaForm() {
+      document.getElementById('add-idea-form').classList.toggle('hidden');
+    }
+
+    function saveNewIdea() {
+      const title  = document.getElementById('new-idea-title').value.trim();
+      const desc   = document.getElementById('new-idea-desc').value.trim();
+      const format = document.getElementById('new-idea-format').value;
+      const viral  = parseInt(document.getElementById('new-idea-viral').value)  || 0;
+      const effort = parseInt(document.getElementById('new-idea-effort').value) || 0;
+
+      if (!title) { alert('Ajoute un titre pour l\'idée'); return; }
+
+      ideas.push({ title, desc, format, viral, effort, decided: null });
+      saveIdeas();
+
+      ['new-idea-title','new-idea-desc','new-idea-viral','new-idea-effort']
+        .forEach(id => { document.getElementById(id).value = ''; });
+
+      document.getElementById('add-idea-form').classList.add('hidden');
+      renderNextIdea();
+    }
+
+
+    // ══════════════════════════════════════════════
+    // RÉGLAGES — CLÉS API
+    // ══════════════════════════════════════════════
+    async function loadMyApis() {
+      try {
+        const resp = await fetch(`${API}/api/creator/apis`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+
+        // Affiche les valeurs masquées actuelles sous chaque champ
+        const map = {
+          'meta_access_token':      'api-meta-token-current',
+          'instagram_business_id':  'api-ig-id-current',
+          'facebook_page_id':       'api-fb-id-current',
+        };
+        for (const [key, elId] of Object.entries(map)) {
+          const el = document.getElementById(elId);
+          if (el) el.textContent = data[key] ? `Actuel : ${data[key]}` : 'Non configuré';
+        }
+      } catch (e) {}
+    }
+
+    async function saveMyApis() {
+      const token = document.getElementById('api-meta-token').value.trim();
+      const igId  = document.getElementById('api-ig-id').value.trim();
+      const fbId  = document.getElementById('api-fb-id').value.trim();
+      const okEl  = document.getElementById('api-success');
+      const errEl = document.getElementById('api-error');
+      okEl.style.display  = 'none';
+      errEl.style.display = 'none';
+
+      const body = {};
+      if (token) body.meta_access_token      = token;
+      if (igId)  body.instagram_business_id  = igId;
+      if (fbId)  body.facebook_page_id       = fbId;
+
+      if (!Object.keys(body).length) {
+        errEl.textContent   = 'Remplis au moins un champ.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        const resp = await fetch(`${API}/api/creator/apis`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body:    JSON.stringify(body)
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          okEl.style.display = 'block';
+          // Vide les champs + recharge les masques
+          document.getElementById('api-meta-token').value = '';
+          document.getElementById('api-ig-id').value      = '';
+          document.getElementById('api-fb-id').value      = '';
+          loadMyApis();
+        } else {
+          errEl.textContent   = data.error || 'Erreur';
+          errEl.style.display = 'block';
+        }
+      } catch (e) {
+        errEl.textContent   = 'Erreur réseau';
+        errEl.style.display = 'block';
+      }
+    }
+
+
+    // ══════════════════════════════════════════════
+    // INIT APP
+    // ══════════════════════════════════════════════
+    document.addEventListener('DOMContentLoaded', () => {
+      checkSessionOnLoad();
+
+      document.getElementById('login-password')
+        ?.addEventListener('keydown', e => {
+          if (e.key === 'Enter') handleLogin();
+        });
+
+      // Date par défaut = aujourd'hui
+      document.getElementById('form-date').valueAsDate = new Date();
     });
-    const data = await resp.json();
-    document.getElementById('sync-text').textContent =
-      `Synced : ${data.synced?.total || 0} lignes ajoutées`;
-    loadStats();
-  } catch(e) {
-    document.getElementById('sync-text').textContent = 'Erreur de connexion';
-  }
-  btn.textContent = 'Sync APIs';
-  btn.disabled = false;
-}
-
-// ══════════════════════════════════════════════
-//  UTILS
-// ══════════════════════════════════════════════
-function fmt(n) {
-  if (!n) return '0';
-  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
-  if (n >= 1000)    return (n/1000).toFixed(1) + 'K';
-  return String(n);
-}
-
-function platformEmoji(p) {
-  return { Instagram:'📸', TikTok:'🎵', YouTube:'▶️', Facebook:'👍', Snapchat:'👻' }[p] || '📱';
-}
 </script>
 </body>
 </html>

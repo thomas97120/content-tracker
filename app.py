@@ -1,14 +1,16 @@
 """
-app.py — version 2.5 sécurisée
+app.py — version 3.0
 Démarre avec : python app.py
 """
 
 from flask import Flask, jsonify, request, send_file, session
 from flask_cors import CORS
 from functools import wraps
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 import json
 import os
+import secrets
+import datetime as dt
 
 from collectors import get_youtube_stats, get_instagram_stats, get_facebook_stats
 from sheets import (
@@ -17,11 +19,7 @@ from sheets import (
 )
 
 app = Flask(__name__)
-
-# IMPORTANT : remplace cette valeur sur Render
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-render")
-
-# Très important pour que le front déployé puisse envoyer les cookies de session
 CORS(app, supports_credentials=True)
 
 
@@ -36,6 +34,11 @@ def load_users():
         return []
     with open(USERS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def save_users(users):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, indent=2, ensure_ascii=False)
 
 
 def find_user_by_email(email):
@@ -85,12 +88,12 @@ def can_access_creator(requested_creator):
 
 
 # ──────────────────────────────────────────────────────────────
-# AUTH
+# AUTH — LOGIN / LOGOUT / ME
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/auth/login", methods=["POST"])
 def login():
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip()
+    data     = request.get_json(silent=True) or {}
+    email    = (data.get("email") or "").strip()
     password = data.get("password") or ""
 
     if not email or not password:
@@ -100,13 +103,16 @@ def login():
     if not user or not check_password_hash(user["password_hash"], password):
         return jsonify({"error": "Identifiants invalides"}), 401
 
-    session["user_email"] = user["email"]
+    # Vérifie email si le champ existe (rétrocompatible : comptes anciens = ok)
+    if not user.get("verified", True):
+        return jsonify({"error": "Email non vérifié. Vérifie ta boîte mail."}), 401
 
+    session["user_email"] = user["email"]
     return jsonify({
         "success": True,
         "user": {
-            "email": user["email"],
-            "role": user["role"],
+            "email":        user["email"],
+            "role":         user["role"],
             "creator_name": user.get("creator_name")
         }
     })
@@ -124,21 +130,236 @@ def logout():
 def me():
     user = current_user()
     return jsonify({
-        "email": user["email"],
-        "role": user["role"],
+        "email":        user["email"],
+        "role":         user["role"],
         "creator_name": user.get("creator_name")
     })
 
 
 # ──────────────────────────────────────────────────────────────
-# ROUTES CRÉATEUR
+# AUTH — INSCRIPTION
+# ──────────────────────────────────────────────────────────────
+@app.route("/api/auth/register", methods=["POST"])
+def register():
+    from mailer import send_verification
+
+    data         = request.get_json(silent=True) or {}
+    email        = (data.get("email") or "").strip().lower()
+    password     = data.get("password") or ""
+    creator_name = (data.get("creator_name") or "").strip()
+
+    if not email or not password or not creator_name:
+        return jsonify({"error": "Email, mot de passe et nom de créateur requis"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Mot de passe trop court (8 caractères minimum)"}), 400
+    if find_user_by_email(email):
+        return jsonify({"error": "Cet email est déjà utilisé"}), 409
+
+    token  = secrets.token_urlsafe(32)
+    expiry = (dt.datetime.now() + dt.timedelta(hours=24)).isoformat()
+
+    users = load_users()
+    users.append({
+        "email":                email,
+        "password_hash":        generate_password_hash(password),
+        "role":                 "creator",
+        "creator_name":         creator_name,
+        "verified":             False,
+        "verification_token":   token,
+        "token_expiry":         expiry,
+    })
+    save_users(users)
+    send_verification(email, token)
+
+    return jsonify({
+        "success": True,
+        "message": "Compte créé ! Vérifie ta boîte mail pour activer ton compte."
+    })
+
+
+# ──────────────────────────────────────────────────────────────
+# AUTH — VÉRIFICATION EMAIL
+# ──────────────────────────────────────────────────────────────
+@app.route("/api/auth/verify/<token>", methods=["GET"])
+def verify_email(token):
+    users = load_users()
+    user  = next((u for u in users if u.get("verification_token") == token), None)
+
+    if not user:
+        return _html_page("❌ Lien invalide", "Ce lien de vérification n'existe pas."), 400
+
+    expiry = user.get("token_expiry")
+    if expiry and dt.datetime.fromisoformat(expiry) < dt.datetime.now():
+        return _html_page("⏰ Lien expiré", "Inscris-toi à nouveau pour recevoir un nouveau lien."), 400
+
+    user["verified"] = True
+    user.pop("verification_token", None)
+    user.pop("token_expiry", None)
+    save_users(users)
+
+    return _html_page(
+        "✅ Email confirmé !",
+        "Ton compte est activé. <a href='/'>Connecte-toi maintenant →</a>"
+    )
+
+
+# ──────────────────────────────────────────────────────────────
+# AUTH — MOT DE PASSE OUBLIÉ
+# ──────────────────────────────────────────────────────────────
+@app.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    from mailer import send_reset
+
+    data  = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+
+    user = find_user_by_email(email)
+    if user:
+        token  = secrets.token_urlsafe(32)
+        expiry = (dt.datetime.now() + dt.timedelta(hours=1)).isoformat()
+
+        users = load_users()
+        for u in users:
+            if u["email"].lower() == email:
+                u["reset_token"]  = token
+                u["reset_expiry"] = expiry
+                break
+        save_users(users)
+        send_reset(email, token)
+
+    # Toujours répondre OK (pas de fuite info sur l'existence de l'email)
+    return jsonify({
+        "success": True,
+        "message": "Si cet email existe, un lien de réinitialisation a été envoyé."
+    })
+
+
+@app.route("/api/auth/reset/<token>", methods=["GET"])
+def reset_password_page(token):
+    """Page HTML de reset (rendu côté serveur)."""
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Nouveau mot de passe — Content Tracker</title>
+  <style>
+    body {{ font-family:'DM Sans',sans-serif; background:#0a0a0f; color:#f0f0f5;
+           display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }}
+    .card {{ background:#1a1a24; border:1px solid rgba(255,255,255,.07);
+             border-radius:16px; padding:32px; width:340px; }}
+    h2 {{ margin:0 0 8px; }}
+    p  {{ color:#6b6b80; font-size:13px; margin:0 0 24px; }}
+    input {{ width:100%; background:#13131a; border:1px solid rgba(255,255,255,.07);
+             border-radius:10px; color:#f0f0f5; font-size:15px; padding:12px 14px;
+             outline:none; box-sizing:border-box; margin-bottom:12px; }}
+    input:focus {{ border-color:#7c6aff; }}
+    button {{ width:100%; padding:14px; border:none; border-radius:10px;
+              background:linear-gradient(135deg,#7c6aff,#ff6a9b);
+              color:#fff; font-size:15px; font-weight:500; cursor:pointer; }}
+    #msg {{ margin-top:12px; font-size:13px; text-align:center; }}
+    .ok  {{ color:#3ddc84; }}
+    .err {{ color:#ff5555; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔑 Nouveau mot de passe</h2>
+    <p>Choisis un mot de passe de 8 caractères minimum.</p>
+    <input type="password" id="pwd"  placeholder="Nouveau mot de passe">
+    <input type="password" id="pwd2" placeholder="Confirme le mot de passe">
+    <button onclick="reset()">Changer le mot de passe</button>
+    <div id="msg"></div>
+  </div>
+  <script>
+    async function reset() {{
+      const p1  = document.getElementById('pwd').value;
+      const p2  = document.getElementById('pwd2').value;
+      const msg = document.getElementById('msg');
+      if (p1.length < 8)  {{ msg.className='err'; msg.textContent='Trop court (8 min)'; return; }}
+      if (p1 !== p2)       {{ msg.className='err'; msg.textContent='Les mots de passe sont différents'; return; }}
+      const r = await fetch('/api/auth/reset/{token}', {{
+        method: 'POST',
+        headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{ password: p1 }})
+      }});
+      const d = await r.json();
+      msg.className = r.ok ? 'ok' : 'err';
+      msg.textContent = d.message || d.error;
+      if (r.ok) setTimeout(() => window.location = '/', 2000);
+    }}
+  </script>
+</body>
+</html>"""
+
+
+@app.route("/api/auth/reset/<token>", methods=["POST"])
+def reset_password(token):
+    data     = request.get_json(silent=True) or {}
+    password = data.get("password") or ""
+
+    if len(password) < 8:
+        return jsonify({"error": "Mot de passe trop court"}), 400
+
+    users = load_users()
+    user  = next((u for u in users if u.get("reset_token") == token), None)
+
+    if not user:
+        return jsonify({"error": "Lien invalide ou déjà utilisé"}), 400
+
+    expiry = user.get("reset_expiry")
+    if expiry and dt.datetime.fromisoformat(expiry) < dt.datetime.now():
+        return jsonify({"error": "Lien expiré (1h max)"}), 400
+
+    user["password_hash"] = generate_password_hash(password)
+    user.pop("reset_token",  None)
+    user.pop("reset_expiry", None)
+    save_users(users)
+
+    return jsonify({"success": True, "message": "Mot de passe changé ! Redirection…"})
+
+
+# ──────────────────────────────────────────────────────────────
+# CREATOR — CLÉS API
+# ──────────────────────────────────────────────────────────────
+@app.route("/api/creator/apis", methods=["GET"])
+@login_required
+def get_my_apis():
+    from creator_apis import get_masked_apis
+    user    = current_user()
+    creator = user.get("creator_name") or user["email"]
+    return jsonify(get_masked_apis(creator))
+
+
+@app.route("/api/creator/apis", methods=["POST"])
+@login_required
+def save_my_apis():
+    from creator_apis import save_creator_apis
+    user    = current_user()
+    creator = user.get("creator_name") or user["email"]
+    data    = request.get_json(silent=True) or {}
+    save_creator_apis(creator, data)
+    return jsonify({"success": True, "message": "Clés API sauvegardées."})
+
+
+@app.route("/api/creator/apis/<key>", methods=["DELETE"])
+@login_required
+def delete_my_api(key):
+    from creator_apis import delete_creator_api
+    user    = current_user()
+    creator = user.get("creator_name") or user["email"]
+    delete_creator_api(creator, key)
+    return jsonify({"success": True})
+
+
+# ──────────────────────────────────────────────────────────────
+# ROUTES CRÉATEUR — STATS / IDÉES
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/stats/<creator>", methods=["GET"])
 @login_required
 def get_stats(creator):
     if not can_access_creator(creator):
         return jsonify({"error": "Accès interdit"}), 403
-
     stats = get_creator_stats(creator)
     return jsonify({"creator": creator, "stats": stats})
 
@@ -196,29 +417,39 @@ def dashboard():
 @app.route("/api/admin/sync", methods=["POST"])
 @admin_required
 def sync_all():
-    results = {}
+    """Sync global (env vars) ou par créateur si token présent."""
     try:
+        from creator_apis import get_creator_apis
         from sheets import get_google_creds, write_stats_to_sheet, get_spreadsheet_id
-        creds = get_google_creds()
+
+        creds    = get_google_creds()
         sheet_id = get_spreadsheet_id()
 
+        # YouTube : toujours via OAuth global
         yt_stats = get_youtube_stats(creds)
-        ig_stats = get_instagram_stats()
-        fb_stats = get_facebook_stats()
+
+        # Instagram + Facebook : agrège tous les créateurs
+        ig_stats, fb_stats = [], []
+        creators = get_all_creators()
+        for creator in creators:
+            c_apis = get_creator_apis(creator)
+            token  = c_apis.get("meta_access_token")
+            ig_id  = c_apis.get("instagram_business_id")
+            fb_id  = c_apis.get("facebook_page_id")
+            ig_stats += get_instagram_stats(token=token, business_id=ig_id)
+            fb_stats += get_facebook_stats(token=token, page_id=fb_id)
 
         all_stats = yt_stats + ig_stats + fb_stats
         write_stats_to_sheet(creds, sheet_id, all_stats)
 
-        results = {
-            "youtube": len(yt_stats),
+        return jsonify({"synced": {
+            "youtube":   len(yt_stats),
             "instagram": len(ig_stats),
-            "facebook": len(fb_stats),
-            "total": len(all_stats)
-        }
+            "facebook":  len(fb_stats),
+            "total":     len(all_stats)
+        }})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-    return jsonify({"synced": results})
 
 
 # ──────────────────────────────────────────────────────────────
@@ -226,12 +457,41 @@ def sync_all():
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "version": "2.5.0"})
+    return jsonify({"status": "ok", "version": "3.0.0"})
 
 
 @app.route("/", methods=["GET"])
 def serve_index():
     return send_file("index.html")
+
+
+# ──────────────────────────────────────────────────────────────
+# HELPERS
+# ──────────────────────────────────────────────────────────────
+def _html_page(title: str, body: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{title} — Content Tracker</title>
+  <style>
+    body {{ font-family:'DM Sans',sans-serif; background:#0a0a0f; color:#f0f0f5;
+           display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }}
+    .card {{ background:#1a1a24; border:1px solid rgba(255,255,255,.07);
+             border-radius:16px; padding:40px 32px; text-align:center; max-width:400px; }}
+    h2 {{ margin:0 0 12px; font-size:22px; }}
+    p  {{ color:#9090a0; line-height:1.6; }}
+    a  {{ color:#7c6aff; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>{title}</h2>
+    <p>{body}</p>
+  </div>
+</body>
+</html>"""
 
 
 if __name__ == "__main__":
