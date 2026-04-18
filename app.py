@@ -1,5 +1,5 @@
 """
-app.py — version 3.0
+app.py — version 3.1
 Démarre avec : python app.py
 """
 
@@ -14,7 +14,7 @@ import datetime as dt
 
 from collectors import get_youtube_stats, get_instagram_stats, get_facebook_stats
 from sheets import (
-    get_all_creators, get_creator_stats, add_manual_stats,
+    get_creator_stats, add_manual_stats,
     get_dashboard_data, save_content_decision
 )
 
@@ -24,26 +24,59 @@ CORS(app, supports_credentials=True)
 
 
 # ──────────────────────────────────────────────────────────────
-# USERS
+# USERS — cache mémoire + env var Render comme source initiale
 # ──────────────────────────────────────────────────────────────
 USERS_FILE = "users.json"
+_users_cache: list | None = None
 
 
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        return []
-    with open(USERS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+def load_users() -> list:
+    global _users_cache
+    if _users_cache is not None:
+        return _users_cache
+
+    # 1. Fichier local (dev ou fichier déjà initialisé)
+    if os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            _users_cache = json.load(f)
+        return _users_cache
+
+    # 2. Env var Render (USERS_JSON) → bootstrap
+    env_data = os.environ.get("USERS_JSON")
+    if env_data:
+        _users_cache = json.loads(env_data)
+        _flush_users()          # écrit le fichier pour cette session
+        return _users_cache
+
+    _users_cache = []
+    return _users_cache
 
 
-def save_users(users):
+def _flush_users():
+    """Écrit le cache sur disque."""
     with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, indent=2, ensure_ascii=False)
+        json.dump(_users_cache, f, indent=2, ensure_ascii=False)
 
 
-def find_user_by_email(email):
-    users = load_users()
-    return next((u for u in users if u["email"].lower() == email.lower()), None)
+def save_users(users: list):
+    global _users_cache
+    _users_cache = users
+    _flush_users()
+
+
+def get_all_creators() -> list:
+    """Tous les créateurs depuis users.json (pas l'env var CREATORS)."""
+    return [
+        u["creator_name"]
+        for u in load_users()
+        if u.get("creator_name") and u.get("role") == "creator"
+    ]
+
+
+def find_user_by_email(email: str):
+    return next(
+        (u for u in load_users() if u["email"].lower() == email.lower()), None
+    )
 
 
 def current_user():
