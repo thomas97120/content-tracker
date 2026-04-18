@@ -520,51 +520,59 @@ def tiktok_connect():
 
 @app.route("/api/auth/tiktok/callback")
 def tiktok_callback():
-    import json as _json
-    from creator_apis import save_creator_apis
+    try:
+        import json as _json
+        from creator_apis import save_creator_apis
 
-    code    = request.args.get("code")
-    state   = request.args.get("state")
-    creator = session.get("oauth_creator")
+        code    = request.args.get("code")
+        state   = request.args.get("state")
+        creator = session.get("oauth_creator")
 
-    if state != session.get("tiktok_state") or not creator:
-        return redirect("/?error=tiktok_state_mismatch")
-    if not code:
-        err = request.args.get("error_description", "access_denied")
-        return redirect(f"/?error=tiktok_{err[:60]}")
+        if not creator:
+            return redirect("/?error=tiktok_session_perdue_reconnecte_toi")
+        if state != session.get("tiktok_state"):
+            return redirect("/?error=tiktok_state_mismatch")
+        if not code:
+            err = request.args.get("error_description", "access_denied")
+            return redirect(f"/?error=tiktok_{err[:60]}")
 
-    client_key     = os.environ.get("TIKTOK_CLIENT_KEY")
-    client_secret  = os.environ.get("TIKTOK_CLIENT_SECRET")
-    redirect_uri   = f"{APP_URL}/api/auth/tiktok/callback"
-    code_verifier  = session.get("tiktok_code_verifier", "")
+        client_key    = os.environ.get("TIKTOK_CLIENT_KEY")
+        client_secret = os.environ.get("TIKTOK_CLIENT_SECRET")
+        redirect_uri  = f"{APP_URL}/api/auth/tiktok/callback"
+        code_verifier = session.get("tiktok_code_verifier", "")
 
-    token_resp = requests.post(
-        "https://open.tiktokapis.com/v2/oauth/token/",
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data={
-            "client_key":     client_key,
-            "client_secret":  client_secret,
-            "code":           code,
-            "grant_type":     "authorization_code",
-            "redirect_uri":   redirect_uri,
-            "code_verifier":  code_verifier,
+        token_resp = requests.post(
+            "https://open.tiktokapis.com/v2/oauth/token/",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "client_key":    client_key,
+                "client_secret": client_secret,
+                "code":          code,
+                "grant_type":    "authorization_code",
+                "redirect_uri":  redirect_uri,
+                "code_verifier": code_verifier,
+            }
+        ).json()
+
+        print(f"TikTok token response: {token_resp}")
+
+        access_token = token_resp.get("access_token")
+        if not access_token:
+            err = token_resp.get("message") or token_resp.get("error_description") or str(token_resp)
+            return redirect(f"/?error=tiktok_{str(err)[:80]}")
+
+        token_data = {
+            "access_token":  access_token,
+            "refresh_token": token_resp.get("refresh_token"),
+            "open_id":       token_resp.get("open_id"),
+            "scope":         token_resp.get("scope"),
+            "expires_in":    token_resp.get("expires_in"),
         }
-    ).json()
+        save_creator_apis(creator, {"tiktok_token": _json.dumps(token_data)})
+        return redirect("/?connected=tiktok")
 
-    access_token  = token_resp.get("access_token")
-    if not access_token:
-        err = token_resp.get("message", "token_failed")
-        return redirect(f"/?error=tiktok_{str(err)[:60]}")
-
-    token_data = {
-        "access_token":  access_token,
-        "refresh_token": token_resp.get("refresh_token"),
-        "open_id":       token_resp.get("open_id"),
-        "scope":         token_resp.get("scope"),
-        "expires_in":    token_resp.get("expires_in"),
-    }
-    save_creator_apis(creator, {"tiktok_token": _json.dumps(token_data)})
-    return redirect("/?connected=tiktok")
+    except Exception as e:
+        return redirect(f"/?error=tiktok_exception_{str(e)[:80]}")
 
 
 # ──────────────────────────────────────────────────────────────
