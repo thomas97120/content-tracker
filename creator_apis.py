@@ -46,6 +46,7 @@ ALLOWED_KEYS = {
     "facebook_page_id",
     "youtube_api_key",
     "youtube_channel_id",
+    "google_token",
 }
 
 _cache: dict | None = None
@@ -98,14 +99,18 @@ def get_masked_apis(creator_name: str) -> dict:
     """Retourne les clés masquées pour affichage côté client."""
     apis   = get_creator_apis(creator_name)
     result = {}
+    # Clés dont la présence suffit (on affiche juste "connecté")
+    TOKEN_KEYS = {"google_token"}
     for key in ALLOWED_KEYS:
         val = apis.get(key, "")
-        if val and len(val) >= 8:
-            result[key] = val[:4] + "••••" + val[-4:]
-        elif val:
-            result[key] = "••••"
-        else:
+        if not val:
             result[key] = ""
+        elif key in TOKEN_KEYS:
+            result[key] = "connecté"
+        elif len(val) >= 8:
+            result[key] = val[:4] + "••••" + val[-4:]
+        else:
+            result[key] = "••••"
     return result
 
 

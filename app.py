@@ -3,7 +3,7 @@ app.py — version 3.1
 Démarre avec : python app.py
 """
 
-from flask import Flask, jsonify, request, send_file, session
+from flask import Flask, jsonify, redirect, request, send_file, session
 from flask_cors import CORS
 from functools import wraps
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -18,6 +18,8 @@ from sheets import (
     get_dashboard_data, save_content_decision
 )
 # get_all_creators est défini localement (lit users.json)
+
+APP_URL = os.environ.get("APP_URL", "http://localhost:5000")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-render")
@@ -386,6 +388,175 @@ def reset_password(token):
 
 
 # ──────────────────────────────────────────────────────────────
+# OAUTH — GOOGLE (YouTube)
+# ──────────────────────────────────────────────────────────────
+@app.route("/api/auth/google/connect")
+@login_required
+def google_connect():
+    client_id     = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    if not client_id or not client_secret:
+        return jsonify({"error": "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET manquants dans Render"}), 500
+
+    from google_auth_oauthlib.flow import Flow
+    flow = Flow.from_client_config(
+        {"web": {
+            "client_id":     client_id,
+            "client_secret": client_secret,
+            "redirect_uris": [f"{APP_URL}/api/auth/google/callback"],
+            "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
+            "token_uri":     "https://oauth2.googleapis.com/token",
+        }},
+        scopes=[
+            "https://www.googleapis.com/auth/youtube.readonly",
+            "https://www.googleapis.com/auth/yt-analytics.readonly",
+        ]
+    )
+    flow.redirect_uri = f"{APP_URL}/api/auth/google/callback"
+    auth_url, state  = flow.authorization_url(access_type="offline", prompt="consent")
+
+    user = current_user()
+    session["oauth_state"]   = state
+    session["oauth_creator"] = user.get("creator_name") or user["email"]
+    return redirect(auth_url)
+
+
+@app.route("/api/auth/google/callback")
+def google_callback():
+    import json as _json
+    from google_auth_oauthlib.flow import Flow
+    from creator_apis import save_creator_apis
+
+    client_id     = os.environ.get("GOOGLE_CLIENT_ID")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    state         = session.get("oauth_state")
+    creator       = session.get("oauth_creator")
+
+    if not creator:
+        return redirect("/?error=session_lost")
+
+    flow = Flow.from_client_config(
+        {"web": {
+            "client_id":     client_id,
+            "client_secret": client_secret,
+            "redirect_uris": [f"{APP_URL}/api/auth/google/callback"],
+            "auth_uri":      "https://accounts.google.com/o/oauth2/auth",
+            "token_uri":     "https://oauth2.googleapis.com/token",
+        }},
+        scopes=[
+            "https://www.googleapis.com/auth/youtube.readonly",
+            "https://www.googleapis.com/auth/yt-analytics.readonly",
+        ],
+        state=state
+    )
+    flow.redirect_uri = f"{APP_URL}/api/auth/google/callback"
+
+    try:
+        # Nécessite HTTPS en prod — contourne pour le callback
+        import os as _os
+        _os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+        flow.fetch_token(authorization_response=request.url.replace("http://", "https://"))
+        creds = flow.credentials
+        token_data = {
+            "token":         creds.token,
+            "refresh_token": creds.refresh_token,
+            "token_uri":     creds.token_uri,
+            "client_id":     creds.client_id,
+            "client_secret": creds.client_secret,
+            "scopes":        list(creds.scopes or []),
+        }
+        save_creator_apis(creator, {"google_token": _json.dumps(token_data)})
+        return redirect("/?connected=youtube")
+    except Exception as e:
+        return redirect(f"/?error={str(e)[:80]}")
+
+
+# ──────────────────────────────────────────────────────────────
+# OAUTH — META (Instagram + Facebook)
+# ──────────────────────────────────────────────────────────────
+@app.route("/api/auth/meta/connect")
+@login_required
+def meta_connect():
+    app_id = os.environ.get("META_APP_ID")
+    if not app_id:
+        return jsonify({"error": "META_APP_ID manquant dans Render"}), 500
+
+    user    = current_user()
+    state   = secrets.token_urlsafe(16)
+    creator = user.get("creator_name") or user["email"]
+    session["meta_state"]    = state
+    session["oauth_creator"] = creator
+
+    redirect_uri = f"{APP_URL}/api/auth/meta/callback"
+    scope        = "instagram_basic,instagram_manage_insights,pages_show_list,pages_read_engagement,read_insights"
+    auth_url     = (
+        f"https://www.facebook.com/v19.0/dialog/oauth"
+        f"?client_id={app_id}"
+        f"&redirect_uri={redirect_uri}"
+        f"&scope={scope}"
+        f"&state={state}"
+    )
+    return redirect(auth_url)
+
+
+@app.route("/api/auth/meta/callback")
+def meta_callback():
+    from creator_apis import save_creator_apis
+
+    state   = request.args.get("state")
+    code    = request.args.get("code")
+    creator = session.get("oauth_creator")
+
+    if state != session.get("meta_state") or not creator:
+        return redirect("/?error=oauth_state_mismatch")
+
+    app_id      = os.environ.get("META_APP_ID")
+    app_secret  = os.environ.get("META_APP_SECRET")
+    redirect_uri = f"{APP_URL}/api/auth/meta/callback"
+
+    # Code → token court
+    token_resp  = requests.get(
+        "https://graph.facebook.com/v19.0/oauth/access_token",
+        params={"client_id": app_id, "redirect_uri": redirect_uri,
+                "client_secret": app_secret, "code": code}
+    ).json()
+    short_token = token_resp.get("access_token")
+    if not short_token:
+        return redirect(f"/?error=meta_token_failed")
+
+    # Token court → token long (60 jours)
+    long_resp  = requests.get(
+        "https://graph.facebook.com/v19.0/oauth/access_token",
+        params={"grant_type": "fb_exchange_token", "client_id": app_id,
+                "client_secret": app_secret, "fb_exchange_token": short_token}
+    ).json()
+    long_token = long_resp.get("access_token", short_token)
+
+    # Récupère automatiquement Page ID + Instagram Business ID
+    pages_resp = requests.get(
+        "https://graph.facebook.com/v19.0/me/accounts",
+        params={"access_token": long_token,
+                "fields": "id,name,instagram_business_account"}
+    ).json()
+
+    apis   = {"meta_access_token": long_token}
+    fb_id  = None
+    ig_id  = None
+    for page in pages_resp.get("data", []):
+        if not fb_id:
+            fb_id = page.get("id")
+        ig_acc = page.get("instagram_business_account")
+        if ig_acc and not ig_id:
+            ig_id = ig_acc.get("id")
+
+    if fb_id: apis["facebook_page_id"]      = fb_id
+    if ig_id: apis["instagram_business_id"] = ig_id
+
+    save_creator_apis(creator, apis)
+    return redirect("/?connected=meta")
+
+
+# ──────────────────────────────────────────────────────────────
 # CREATOR — CLÉS API
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/creator/apis", methods=["GET"])
@@ -585,10 +756,15 @@ def sync_all():
         for creator in creators:
             c_apis = get_creator_apis(creator)
 
-            # YouTube : clé API par créateur si dispo, sinon OAuth global
-            yt_key = c_apis.get("youtube_api_key")
-            yt_cid = c_apis.get("youtube_channel_id")
-            if yt_key and yt_cid:
+            # YouTube : token OAuth créateur → clé API → OAuth global
+            yt_key       = c_apis.get("youtube_api_key")
+            yt_cid       = c_apis.get("youtube_channel_id")
+            google_token = c_apis.get("google_token")
+
+            if google_token:
+                from collectors import get_youtube_stats_oauth_creator
+                yt_stats += get_youtube_stats_oauth_creator(google_token)
+            elif yt_key and yt_cid:
                 yt_stats += get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid)
             else:
                 try:

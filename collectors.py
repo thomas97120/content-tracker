@@ -65,6 +65,35 @@ def get_youtube_stats(creds):
 
 
 # ─────────────────────────────────────────────
+#  YOUTUBE — OAuth token stocké par créateur
+# ─────────────────────────────────────────────
+
+def get_youtube_stats_oauth_creator(token_json: str):
+    """YouTube via token OAuth stocké par créateur."""
+    try:
+        import json as _json
+        from google.oauth2.credentials import Credentials
+        import google.auth.transport.requests as _greq
+
+        data  = _json.loads(token_json)
+        creds = Credentials(
+            token         = data.get("token"),
+            refresh_token = data.get("refresh_token"),
+            token_uri     = data.get("token_uri", "https://oauth2.googleapis.com/token"),
+            client_id     = data.get("client_id"),
+            client_secret = data.get("client_secret"),
+            scopes        = data.get("scopes"),
+        )
+        if creds.expired and creds.refresh_token:
+            creds.refresh(_greq.Request())
+
+        return get_youtube_stats(creds)
+    except Exception as e:
+        print(f"YouTube OAuth créateur ERREUR : {e}")
+        return []
+
+
+# ─────────────────────────────────────────────
 #  YOUTUBE — API Key simple (par créateur)
 # ─────────────────────────────────────────────
 
