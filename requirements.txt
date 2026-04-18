@@ -1,7 +1,9 @@
 flask
 flask-cors
+flask-limiter
 google-api-python-client
 google-auth-oauthlib
 requests
+cryptography
 
 gunicorn

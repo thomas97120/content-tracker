@@ -6,6 +6,36 @@ Fichier : creator_apis.json  |  Env var Render : CREATOR_APIS_JSON
 import json
 import os
 from pathlib import Path
+from cryptography.fernet import Fernet, InvalidToken
+
+
+def _get_fernet():
+    key = os.environ.get("ENCRYPTION_KEY", "")
+    if not key:
+        return None
+    try:
+        return Fernet(key.encode())
+    except Exception:
+        return None
+
+
+def _encrypt(value: str) -> str:
+    f = _get_fernet()
+    if not f or not value:
+        return value
+    return "enc:" + f.encrypt(value.encode()).decode()
+
+
+def _decrypt(value: str) -> str:
+    f = _get_fernet()
+    if not f or not value:
+        return value
+    if not value.startswith("enc:"):
+        return value  # plain text (rétrocompatible)
+    try:
+        return f.decrypt(value[4:].encode()).decode()
+    except (InvalidToken, Exception):
+        return value
 
 APIS_FILE = "creator_apis.json"
 
@@ -49,15 +79,16 @@ def _flush():
 
 
 def get_creator_apis(creator_name: str) -> dict:
-    """Retourne les vraies clés (usage interne serveur uniquement)."""
-    return _load().get(creator_name, {})
+    """Retourne les vraies clés déchiffrées (usage interne serveur uniquement)."""
+    raw = _load().get(creator_name, {})
+    return {k: _decrypt(v) for k, v in raw.items()}
 
 
 def save_creator_apis(creator_name: str, apis: dict):
     """Sauvegarde les clés d'un créateur (whitelist appliquée)."""
     global _cache
     data     = _load()
-    filtered = {k: v.strip() for k, v in apis.items() if k in ALLOWED_KEYS and v}
+    filtered = {k: _encrypt(v.strip()) for k, v in apis.items() if k in ALLOWED_KEYS and v}
     data.setdefault(creator_name, {}).update(filtered)
     _cache = data
     _flush()

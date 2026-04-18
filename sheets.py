@@ -40,6 +40,7 @@ COL_SAUVEGARDES  = 10
 # Col 11 = taux engagement (formule auto)
 # Col 12 = score (formule auto)
 COL_NOTES        = 13
+COL_CREATOR      = 14
 
 
 # ─── Auth ────────────────────────────────────────────────────
@@ -106,7 +107,7 @@ def _get_range(creds, sheet_id, range_str):
 
 
 def _append_rows(creds, sheet_id, sheet_name, rows):
-    range_str = f"'{sheet_name}'!A:N"
+    range_str = f"'{sheet_name}'!A:O"
     _sheets(creds, "post", f"/{sheet_id}/values/{range_str}:append",
             body={"values": rows},
             params={"valueInputOption": "USER_ENTERED", "insertDataOption": "INSERT_ROWS"})
@@ -131,6 +132,10 @@ def get_creator_stats(creator_name: str) -> dict:
             stats = []
             for row in rows:
                 if len(row) < 4 or not row[COL_DATE]:
+                    continue
+                # Filtre par créateur si la colonne existe
+                row_creator = row[COL_CREATOR] if len(row) > COL_CREATOR else ""
+                if row_creator and row_creator != creator_name:
                     continue
                 stats.append({
                     "date":         row[COL_DATE]         if len(row) > COL_DATE         else "",
@@ -191,7 +196,7 @@ def get_dashboard_data() -> dict:
 
 # ─── Écriture des stats ───────────────────────────────────────
 
-def write_stats_to_sheet(creds, sheet_id, all_stats):
+def write_stats_to_sheet(creds, sheet_id, all_stats, creator_name=None):
     """Écrit une liste de stats dans les bons onglets."""
     from collections import defaultdict
     grouped = defaultdict(list)
@@ -215,6 +220,10 @@ def write_stats_to_sheet(creds, sheet_id, all_stats):
                 s.get("commentaires", 0),
                 s.get("partages", 0),
                 s.get("sauvegardes", 0),
+                "",   # col 11 — taux engagement (formule)
+                "",   # col 12 — score (formule)
+                "",   # col 13 — notes
+                creator_name or "",  # col 14 — créateur
             ])
         _append_rows(creds, sheet_id, sheet_name, rows)
 

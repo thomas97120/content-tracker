@@ -21,7 +21,16 @@ from sheets import (
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-render")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY  = True,
+    SESSION_COOKIE_SAMESITE  = 'Lax',
+    SESSION_COOKIE_SECURE    = os.environ.get("FLASK_ENV") != "development",
+)
 CORS(app, supports_credentials=True)
+
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+limiter = Limiter(app=app, key_func=get_remote_address, default_limits=[])
 
 
 # ──────────────────────────────────────────────────────────────
@@ -124,6 +133,7 @@ def can_access_creator(requested_creator):
 # ──────────────────────────────────────────────────────────────
 # AUTH — LOGIN / LOGOUT / ME
 # ──────────────────────────────────────────────────────────────
+@limiter.limit("10 per minute")
 @app.route("/api/auth/login", methods=["POST"])
 def login():
     data     = request.get_json(silent=True) or {}
@@ -168,6 +178,28 @@ def me():
         "role":         user["role"],
         "creator_name": user.get("creator_name")
     })
+
+
+@app.route("/api/auth/change-password", methods=["POST"])
+@login_required
+def change_password():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    current_pw = data.get("current_password") or ""
+    new_pw     = data.get("new_password") or ""
+
+    if not check_password_hash(user["password_hash"], current_pw):
+        return jsonify({"error": "Mot de passe actuel incorrect"}), 400
+    if len(new_pw) < 8:
+        return jsonify({"error": "Nouveau mot de passe trop court (8 car. min)"}), 400
+
+    users = load_users()
+    for u in users:
+        if u["email"] == user["email"]:
+            u["password_hash"] = generate_password_hash(new_pw)
+            break
+    save_users(users)
+    return jsonify({"success": True, "message": "Mot de passe changé !"})
 
 
 # ──────────────────────────────────────────────────────────────
@@ -415,9 +447,43 @@ def add_stats():
     return jsonify({"success": success})
 
 
+@app.route("/api/ideas/<creator>", methods=["GET"])
+@login_required
+def get_ideas(creator):
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    from ideas_store import get_ideas
+    return jsonify({"ideas": get_ideas(creator)})
+
+
+@app.route("/api/ideas", methods=["POST"])
+@login_required
+def add_idea():
+    from ideas_store import add_idea
+    import uuid
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    creator = data.get("creator") or user.get("creator_name") or ""
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    idea = {
+        "id":      str(uuid.uuid4()),
+        "title":   data.get("title", ""),
+        "desc":    data.get("desc", ""),
+        "format":  data.get("format", ""),
+        "viral":   data.get("viral", 0),
+        "effort":  data.get("effort", 0),
+        "decided": None,
+        "created_at": dt.datetime.now().isoformat(),
+    }
+    add_idea(creator, idea)
+    return jsonify({"success": True, "idea": idea})
+
+
 @app.route("/api/ideas/swipe", methods=["POST"])
 @login_required
 def swipe_idea():
+    from ideas_store import update_idea_decision
     user = current_user()
     data = request.get_json(silent=True) or {}
 
@@ -427,6 +493,7 @@ def swipe_idea():
     if user["role"] != "admin" and data["creator"] != user.get("creator_name"):
         return jsonify({"error": "Accès interdit"}), 403
 
+    update_idea_decision(data["creator"], data.get("idea_id", ""), data["decision"])
     save_content_decision(data)
     return jsonify({"success": True})
 
@@ -507,7 +574,7 @@ def sync_all():
 
         try:
             creds = get_google_creds()
-            write_stats_to_sheet(creds, sheet_id, all_stats)
+            write_stats_to_sheet(creds, sheet_id, all_stats, creator_name=creator)
         except Exception as e:
             print(f"Google Sheets write error : {e}")
 
