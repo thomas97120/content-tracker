@@ -144,11 +144,23 @@
   }
 
   /* ── APP SHELL ──────────────────────────────────── */
-  #app { display: none; flex-direction: column; min-height: 100vh; }
+  #app {
+    display: none; flex-direction: column;
+    height: 100dvh;          /* hauteur exacte écran mobile */
+    overflow: hidden;        /* empêche le scroll global */
+  }
+
+  /* Zone scrollable entre topbar et bottom-nav */
+  #page-container {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 
   /* Top bar */
   .topbar {
-    position: sticky; top: 0; z-index: 100;
+    flex-shrink: 0;
+    z-index: 100;
     background: rgba(10,10,15,0.85);
     backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border);
@@ -172,11 +184,12 @@
 
   /* Bottom nav */
   .bottom-nav {
-    position: sticky; bottom: 0; z-index: 100;
+    flex-shrink: 0;
+    z-index: 100;
     background: rgba(10,10,15,0.92);
     backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
-    padding: 8px 8px 20px;
+    padding: 8px 8px env(safe-area-inset-bottom, 20px);
     display: grid;
   }
 
@@ -528,6 +541,9 @@
     <div class="topbar-role" id="topbar-role">Créateur</div>
   </div>
 
+  <!-- Zone scrollable -->
+  <div id="page-container">
+
   <!-- ── PAGE : STATS ── -->
   <div class="page active" id="page-stats">
     <div>
@@ -832,6 +848,8 @@
       </div>
     </div>
   </div>
+
+  </div><!-- /#page-container -->
 
   <!-- Bottom nav (creator) -->
   <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(4, 1fr)">
