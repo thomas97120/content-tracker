@@ -984,6 +984,19 @@ def health():
     return jsonify({"status": "ok", "version": "3.0.0"})
 
 
+@app.route("/api/debug/tiktok")
+def debug_tiktok():
+    key = os.environ.get("TIKTOK_CLIENT_KEY", "")
+    sec = os.environ.get("TIKTOK_CLIENT_SECRET", "")
+    return jsonify({
+        "client_key_set":    bool(key),
+        "client_key_prefix": key[:6] if key else "",
+        "client_key_len":    len(key),
+        "secret_set":        bool(sec),
+        "app_url":           APP_URL,
+    })
+
+
 @app.route("/tiktokYNyZYXbgRqGTDoE1PzdEm9lnu0YXdXTK.txt")
 def tiktok_verify():
     return "tiktok-developers-site-verification=YNyZYXbgRqGTDoE1PzdEm9lnu0YXdXTK", 200, {"Content-Type": "text/plain"}
