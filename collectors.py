@@ -226,7 +226,6 @@ def get_tiktok_stats(token_json: str, days=None):
             headers=headers,
             params={"fields": "open_id,display_name,username,follower_count"}
         )
-        print(f"TikTok user/info status={_ur.status_code} body={_ur.text[:300]}")
         user_resp = _ur.json()
         if user_resp.get("error", {}).get("code", "ok") == "ok":
             u         = user_resp.get("data", {}).get("user", {})
@@ -244,7 +243,6 @@ def get_tiktok_stats(token_json: str, days=None):
         params={"fields": "id,title,create_time,like_count,comment_count,share_count,view_count"},
         json={"max_count": min(_days * 3, 20)},
     )
-    print(f"TikTok video/list status={_vr.status_code} body={_vr.text[:300]}")
     try:
         video_resp = _vr.json()
     except Exception:
