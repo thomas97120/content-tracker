@@ -17,12 +17,14 @@ FACEBOOK_PAGE_ID      = os.environ.get("FACEBOOK_PAGE_ID", "")
 #  YOUTUBE — OAuth (admin global)
 # ─────────────────────────────────────────────
 
-def get_youtube_stats(creds):
+def get_youtube_stats(creds, days=None):
     """
     Stats par vidéo (Data API v3) via OAuth.
     Même résultat que YouTube Studio — titres + stats individuelles.
     """
     from googleapiclient.discovery import build
+
+    _days = days or DAYS_TO_FETCH
 
     youtube = build("youtube", "v3", credentials=creds)
 
@@ -43,7 +45,7 @@ def get_youtube_stats(creds):
         part="id",
         type="video",
         order="date",
-        maxResults=min(DAYS_TO_FETCH * 3, 50)
+        maxResults=min(_days * 3, 50)
     ).execute()
 
     video_ids = [
@@ -60,7 +62,7 @@ def get_youtube_stats(creds):
         part="statistics,snippet"
     ).execute()
 
-    cutoff  = datetime.date.today() - datetime.timedelta(days=DAYS_TO_FETCH)
+    cutoff  = datetime.date.today() - datetime.timedelta(days=_days)
     results = []
 
     for item in vids_resp.get("items", []):
@@ -91,7 +93,7 @@ def get_youtube_stats(creds):
 #  YOUTUBE — OAuth token stocké par créateur
 # ─────────────────────────────────────────────
 
-def get_youtube_stats_oauth_creator(token_json: str):
+def get_youtube_stats_oauth_creator(token_json: str, days=None):
     """YouTube via token OAuth stocké par créateur. Laisse les erreurs remonter."""
     import json as _json
     from google.oauth2.credentials import Credentials
@@ -112,14 +114,14 @@ def get_youtube_stats_oauth_creator(token_json: str):
     if creds.expired and creds.refresh_token:
         creds.refresh(_greq.Request())
 
-    return get_youtube_stats(creds)
+    return get_youtube_stats(creds, days=days)
 
 
 # ─────────────────────────────────────────────
 #  YOUTUBE — API Key simple (par créateur)
 # ─────────────────────────────────────────────
 
-def get_youtube_stats_apikey(api_key=None, channel_id=None):
+def get_youtube_stats_apikey(api_key=None, channel_id=None, days=None):
     """
     Stats YouTube via Data API v3 avec une simple clé API.
     Pas besoin d'OAuth — accès aux données publiques de la chaîne.
@@ -128,6 +130,7 @@ def get_youtube_stats_apikey(api_key=None, channel_id=None):
     if not api_key or not channel_id:
         print("YouTube API Key : youtube_api_key ou youtube_channel_id manquant")
         return []
+    _days = days or DAYS_TO_FETCH
     try:
         BASE   = "https://www.googleapis.com/youtube/v3"
         params = {"key": api_key}
@@ -146,7 +149,7 @@ def get_youtube_stats_apikey(api_key=None, channel_id=None):
         search_resp = requests.get(f"{BASE}/search", params={
             **params, "channelId": channel_id, "part": "id",
             "type": "video", "order": "date",
-            "maxResults": min(DAYS_TO_FETCH * 2, 50)
+            "maxResults": min(_days * 2, 50)
         }).json()
         video_ids = [
             item["id"]["videoId"]
@@ -163,7 +166,7 @@ def get_youtube_stats_apikey(api_key=None, channel_id=None):
             "part": "statistics,snippet"
         }).json()
 
-        cutoff  = datetime.date.today() - datetime.timedelta(days=DAYS_TO_FETCH)
+        cutoff  = datetime.date.today() - datetime.timedelta(days=_days)
         results = []
 
         for item in vids_resp.get("items", []):

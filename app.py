@@ -612,6 +612,8 @@ def get_stats(creator):
         get_instagram_stats, get_facebook_stats,
     )
 
+    days = int(request.args.get("days", 7))
+
     c_apis       = get_creator_apis(creator)
     google_token = c_apis.get("google_token")
     yt_key       = c_apis.get("youtube_api_key")
@@ -626,7 +628,7 @@ def get_stats(creator):
     # YouTube
     if google_token:
         try:
-            rows = get_youtube_stats_oauth_creator(google_token)
+            rows = get_youtube_stats_oauth_creator(google_token, days=days)
             live += rows
             if not rows:
                 errors.append("YouTube OAuth : 0 résultats (chaîne vide ou API non activée)")
@@ -634,7 +636,7 @@ def get_stats(creator):
             errors.append(f"YouTube OAuth : {e}")
     elif yt_key and yt_cid:
         try:
-            rows = get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid)
+            rows = get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid, days=days)
             live += rows
             if not rows:
                 errors.append("YouTube API Key : 0 résultats")
@@ -671,11 +673,11 @@ def get_stats(creator):
                     "id":   row.get("_channel_id", ""),
                 }
         return jsonify({"creator": creator, "stats": by_platform, "source": "live",
-                        "warnings": errors, "accounts": account_info})
+                        "warnings": errors, "accounts": account_info, "days": days})
 
     # Fallback : Sheets
     stats = get_creator_stats(creator)
-    return jsonify({"creator": creator, "stats": stats, "source": "sheets", "errors": errors})
+    return jsonify({"creator": creator, "stats": stats, "source": "sheets", "errors": errors, "days": days})
 
 
 @app.route("/api/stats/manual", methods=["POST"])

@@ -495,6 +495,42 @@
   }
   .account-action.primary { background: var(--accent); color: #fff; border-color: transparent; }
   .account-action:active  { opacity: 0.8; }
+
+/* Period / sort pills */
+.period-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }
+.period-btn {
+  padding:5px 14px; border-radius:20px; font-size:12px; font-weight:500;
+  border:1px solid var(--border); background:var(--surface); color:var(--muted);
+  cursor:pointer; font-family:'DM Sans',sans-serif;
+}
+.period-btn.active { background:var(--accent); color:#fff; border-color:transparent; }
+
+.sort-row { display:flex; gap:6px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.sort-label { font-size:11px; color:var(--muted); }
+.sort-btn {
+  padding:4px 10px; border-radius:8px; font-size:11px; font-weight:500;
+  border:1px solid var(--border); background:var(--surface); color:var(--muted);
+  cursor:pointer; font-family:'DM Sans',sans-serif;
+}
+.sort-btn.active { background:var(--card); color:var(--text); border-color:var(--accent); }
+
+/* KPI grid 2x3 */
+.kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px; }
+.kpi-box {
+  background:var(--card); border:1px solid var(--border); border-radius:var(--r);
+  padding:14px; display:flex; flex-direction:column; gap:4px;
+}
+.kpi-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+.kpi-value { font-size:20px; font-weight:600; letter-spacing:-0.5px; }
+.kpi-sub   { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.kpi-value.purple { color:var(--accent); }
+.kpi-value.green  { color:var(--green); }
+.kpi-value.amber  { color:var(--amber); }
+.kpi-value.red    { color:var(--red); }
+
+/* Post row — more info */
+.post-stats { display:flex; gap:10px; margin-top:4px; flex-wrap:wrap; }
+.post-stat  { font-size:11px; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -580,12 +616,11 @@
 
   <!-- ── PAGE : STATS ── -->
   <div class="page active" id="page-stats">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px">
       <div>
         <div class="section-title" id="stats-greeting">Tes stats</div>
-        <div class="section-sub">7 derniers jours</div>
+        <div class="section-sub" id="stats-period-sub">7 derniers jours</div>
       </div>
-      <!-- Sélecteur créateur (admin only) -->
       <select id="admin-creator-select" class="hidden"
               style="background:var(--card);border:1px solid var(--border);
                      border-radius:var(--r-sm);color:var(--text);padding:8px 12px;
@@ -594,35 +629,73 @@
       </select>
     </div>
 
+    <!-- Sélecteur de période -->
+    <div class="period-row">
+      <button class="period-btn active" data-days="7"  onclick="setPeriod(7)">7 jours</button>
+      <button class="period-btn"        data-days="14" onclick="setPeriod(14)">14 jours</button>
+      <button class="period-btn"        data-days="30" onclick="setPeriod(30)">30 jours</button>
+      <button class="period-btn"        data-days="90" onclick="setPeriod(90)">90 jours</button>
+    </div>
+
     <div id="stats-debug" style="display:none;background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#ff8888;line-height:1.8;margin-bottom:12px"></div>
 
-    <div class="stat-grid">
-      <div class="stat-box">
-        <div class="stat-label">Vues totales</div>
-        <div class="stat-value purple" id="total-views">—</div>
-        <div class="stat-sub">toutes plateformes</div>
+    <!-- KPIs 2x3 -->
+    <div class="kpi-grid">
+      <div class="kpi-box">
+        <div class="kpi-label">Vues totales</div>
+        <div class="kpi-value purple" id="kpi-views">—</div>
+        <div class="kpi-sub" id="kpi-views-sub">toutes plateformes</div>
       </div>
-      <div class="stat-box">
-        <div class="stat-label">Engagement moy.</div>
-        <div class="stat-value green" id="avg-eng">—</div>
-        <div class="stat-sub">sur tes posts</div>
+      <div class="kpi-box">
+        <div class="kpi-label">Engagement moy.</div>
+        <div class="kpi-value green" id="kpi-eng">—</div>
+        <div class="kpi-sub">likes+cmts / vues</div>
       </div>
-      <div class="stat-box">
-        <div class="stat-label">Abonnés</div>
-        <div class="stat-value" id="total-followers">—</div>
-        <div class="stat-sub">total cumulé</div>
+      <div class="kpi-box">
+        <div class="kpi-label">Abonnés</div>
+        <div class="kpi-value" id="kpi-followers">—</div>
+        <div class="kpi-sub">total cumulé</div>
       </div>
-      <div class="stat-box">
-        <div class="stat-label">Posts publiés</div>
-        <div class="stat-value amber" id="total-posts">—</div>
-        <div class="stat-sub">cette semaine</div>
+      <div class="kpi-box">
+        <div class="kpi-label">Posts publiés</div>
+        <div class="kpi-value amber" id="kpi-posts">—</div>
+        <div class="kpi-sub" id="kpi-posts-sub">sur la période</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-label">Vues / vidéo</div>
+        <div class="kpi-value purple" id="kpi-avg-views">—</div>
+        <div class="kpi-sub">moyenne</div>
+      </div>
+      <div class="kpi-box">
+        <div class="kpi-label">Likes totaux</div>
+        <div class="kpi-value red" id="kpi-likes">—</div>
+        <div class="kpi-sub" id="kpi-comments-sub">— commentaires</div>
       </div>
     </div>
 
+    <!-- Meilleure vidéo -->
+    <div class="card" id="best-video-card" style="display:none;margin-bottom:12px">
+      <div class="card-title">🏆 Meilleure vidéo</div>
+      <div id="best-video-content"></div>
+    </div>
+
     <div class="card">
-      <div class="card-title">Par plateforme</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">Par plateforme</div>
+      </div>
       <div class="platform-row" id="platform-pills"></div>
       <div id="account-badge" style="display:none;font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px;margin-bottom:10px"></div>
+
+      <!-- Tri -->
+      <div class="sort-row">
+        <span class="sort-label">Trier :</span>
+        <button class="sort-btn active" data-sort="date"  onclick="setSort('date')">📅 Date</button>
+        <button class="sort-btn"        data-sort="vues"  onclick="setSort('vues')">👁 Vues</button>
+        <button class="sort-btn"        data-sort="eng"   onclick="setSort('eng')">💬 Eng.</button>
+        <button class="sort-btn"        data-sort="likes" onclick="setSort('likes')">❤️ Likes</button>
+        <button class="sort-btn" id="sort-dir-btn" onclick="toggleSortDir()">↓</button>
+      </div>
+
       <div class="post-list" id="post-list">
         <div class="spinner"></div>
       </div>
@@ -1073,6 +1146,9 @@
     let currentPlatform = null; // plateforme sélectionnée (Instagram, TikTok…)
     let allStats    = {};       // toutes les stats récupérées depuis l'API
     let allAccounts = {};       // nom du compte par plateforme {YouTube: {name, id}}
+    let currentDays = 7;
+    let currentSort = 'date';
+    let sortAsc     = false;
 
 
     // ══════════════════════════════════════════════
@@ -1298,7 +1374,7 @@
         currentRole === 'admin' ? viewedCreator : 'Tes stats';
 
       try {
-        const resp = await fetch(`${API}/api/stats/${encodeURIComponent(viewedCreator)}`, {
+        const resp = await fetch(`${API}/api/stats/${encodeURIComponent(viewedCreator)}?days=${currentDays}`, {
           credentials: 'include'
         });
         const data = await resp.json();
@@ -1345,6 +1421,31 @@
       loadStats(creator);
     }
 
+    function setPeriod(days) {
+      currentDays = days;
+      document.querySelectorAll('.period-btn').forEach(b => {
+        b.classList.toggle('active', parseInt(b.dataset.days) === days);
+      });
+      const sub = document.getElementById('stats-period-sub');
+      if (sub) sub.textContent = days + ' derniers jours';
+      loadStats();
+    }
+
+    function setSort(field) {
+      currentSort = field;
+      document.querySelectorAll('.sort-btn[data-sort]').forEach(b => {
+        b.classList.toggle('active', b.dataset.sort === field);
+      });
+      renderPosts();
+    }
+
+    function toggleSortDir() {
+      sortAsc = !sortAsc;
+      const btn = document.getElementById('sort-dir-btn');
+      if (btn) btn.textContent = sortAsc ? '↑' : '↓';
+      renderPosts();
+    }
+
 
     // ══════════════════════════════════════════════
     // RENDER DASHBOARD
@@ -1352,29 +1453,51 @@
 
     // 🔢 Stats globales
     function renderSummary() {
-      let totalViews = 0;
-      let totalPosts = 0;
-      let engSum = 0;
-      let engCount = 0;
-      let totalFollowers = 0;
+      let totalViews = 0, totalPosts = 0, totalLikes = 0, totalComments = 0;
+      let engSum = 0, engCount = 0, totalFollowers = 0;
+      let bestPost = null;
 
       for (const posts of Object.values(allStats)) {
         for (const p of posts) {
-          totalViews += p.vues || 0;
+          totalViews    += p.vues  || 0;
+          totalLikes    += p.likes || 0;
+          totalComments += p.commentaires || 0;
           totalPosts++;
-          const eng = p.taux_eng
-            ? p.taux_eng
-            : (p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100) : 0);
+          const eng = p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100) : 0;
           if (eng > 0) { engSum += eng; engCount++; }
+          if (!bestPost || (p.vues || 0) > (bestPost.vues || 0)) bestPost = p;
         }
-        // Abonnés = dernière valeur connue par plateforme
         if (posts.length) totalFollowers += posts[posts.length - 1].abonnes || 0;
       }
 
-      document.getElementById('total-views').textContent     = totalViews ? fmt(totalViews) : '—';
-      document.getElementById('avg-eng').textContent         = engCount ? (engSum / engCount).toFixed(1) + '%' : '—';
-      document.getElementById('total-posts').textContent     = totalPosts || '—';
-      document.getElementById('total-followers').textContent = totalFollowers ? fmt(totalFollowers) : '—';
+      const avgEng   = engCount   ? engSum / engCount     : 0;
+      const avgViews = totalPosts ? totalViews / totalPosts : 0;
+
+      document.getElementById('kpi-views').textContent     = totalViews ? fmt(totalViews) : '—';
+      document.getElementById('kpi-eng').textContent       = engCount   ? avgEng.toFixed(1) + '%' : '—';
+      document.getElementById('kpi-followers').textContent = totalFollowers ? fmt(totalFollowers) : '—';
+      document.getElementById('kpi-posts').textContent     = totalPosts || '—';
+      document.getElementById('kpi-avg-views').textContent = avgViews   ? fmt(Math.round(avgViews)) : '—';
+      document.getElementById('kpi-likes').textContent     = totalLikes ? fmt(totalLikes) : '—';
+      document.getElementById('kpi-comments-sub').textContent = totalComments ? fmt(totalComments) + ' commentaires' : '0 commentaires';
+
+      // Meilleure vidéo
+      const card = document.getElementById('best-video-card');
+      const content = document.getElementById('best-video-content');
+      if (bestPost && bestPost.vues > 0 && card && content) {
+        card.style.display = 'block';
+        const eng = bestPost.vues > 0 ? ((bestPost.likes + bestPost.commentaires) / bestPost.vues * 100).toFixed(1) : '0';
+        content.innerHTML = `
+          <div style="font-size:14px;font-weight:500;margin-bottom:6px">${bestPost.titre || bestPost.date}</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <span style="font-size:13px;color:var(--accent)">👁 ${fmt(bestPost.vues)} vues</span>
+            <span style="font-size:13px;color:var(--red)">❤️ ${fmt(bestPost.likes)} likes</span>
+            <span style="font-size:13px;color:var(--green)">${eng}% eng.</span>
+            <span style="font-size:12px;color:var(--muted)">${bestPost.date}</span>
+          </div>`;
+      } else if (card) {
+        card.style.display = 'none';
+      }
     }
 
 
@@ -1434,42 +1557,51 @@
     // 📊 Liste des posts
     function renderPosts() {
       const list = document.getElementById('post-list');
+      if (!currentPlatform) { list.innerHTML = '<div class="empty">Aucune donnée</div>'; return; }
 
-      if (!currentPlatform) {
-        list.innerHTML = '<div class="empty">Aucune donnée</div>';
-        return;
-      }
+      let posts = [...(allStats[currentPlatform] || [])];
+      if (!posts.length) { list.innerHTML = '<div class="empty">Aucun post</div>'; return; }
 
-      const posts = allStats[currentPlatform] || [];
-
-      if (!posts.length) {
-        list.innerHTML = '<div class="empty">Aucun post</div>';
-        return;
-      }
+      // Sort
+      posts.sort((a, b) => {
+        let va, vb;
+        if (currentSort === 'date')  { va = a.date  || ''; vb = b.date  || ''; }
+        else if (currentSort === 'vues')  { va = a.vues  || 0;  vb = b.vues  || 0; }
+        else if (currentSort === 'likes') { va = a.likes || 0;  vb = b.likes || 0; }
+        else if (currentSort === 'eng')   {
+          va = a.vues > 0 ? (a.likes + a.commentaires) / a.vues : 0;
+          vb = b.vues > 0 ? (b.likes + b.commentaires) / b.vues : 0;
+        }
+        return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+      });
 
       const platformColors = {
-        Instagram: 'var(--ig)', TikTok: 'var(--tt)', YouTube: 'var(--yt)',
-        Facebook: 'var(--fb)', Snapchat: 'var(--snap)'
+        Instagram: 'var(--ig)', YouTube: 'var(--yt)',
+        Facebook:  'var(--fb)', TikTok:  '#69c9d0', Snapchat: 'var(--snap)'
       };
       const dotColor = platformColors[currentPlatform] || 'var(--accent)';
 
       list.innerHTML = posts.map(p => {
-        // Calcule engagement en live si taux_eng absent (YouTube Analytics)
         const eng = p.taux_eng
           ? p.taux_eng
           : (p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100) : 0);
         const titre = (!p.titre || p.titre === '—')
-          ? (p.format === 'Video' ? `📅 ${p.date}` : p.format || '—')
+          ? (p.format === 'Video' || p.format === 'Short' ? `📅 ${p.date}` : p.format || '—')
           : p.titre;
         return `
-          <div class="post-row">
-            <div class="post-dot" style="background:${dotColor}"></div>
-            <div class="post-info">
-              <div class="post-title">${titre}</div>
-              <div class="post-meta">${p.date || ''} · ${fmt(p.vues)} vues · ${fmt(p.likes)} likes</div>
-            </div>
-            <div class="post-eng ${engClass(eng)}">${eng.toFixed(1)}%</div>
-          </div>`;
+      <div class="post-row">
+        <div class="post-dot" style="background:${dotColor}"></div>
+        <div class="post-info" style="flex:1;min-width:0">
+          <div class="post-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titre}</div>
+          <div class="post-meta">${p.date || ''} · ${fmt(p.vues)} vues · ${fmt(p.likes)} ❤️</div>
+          <div class="post-stats">
+            <span class="post-stat">💬 ${fmt(p.commentaires || 0)}</span>
+            <span class="post-stat">↗️ ${fmt(p.partages || 0)}</span>
+            ${p.sauvegardes ? `<span class="post-stat">🔖 ${fmt(p.sauvegardes)}</span>` : ''}
+            <span class="post-stat" style="color:${eng >= 5 ? 'var(--green)' : eng >= 2 ? 'var(--amber)' : 'var(--red)'}">${eng.toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>`;
       }).join('');
 
       renderChart();
