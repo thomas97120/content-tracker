@@ -18,12 +18,15 @@ FACEBOOK_PAGE_ID      = os.environ.get("FACEBOOK_PAGE_ID", "")
 # ─────────────────────────────────────────────
 
 def get_youtube_stats(creds):
-    """Laisse les erreurs remonter pour diagnostic."""
+    """
+    Stats par vidéo (Data API v3) via OAuth.
+    Même résultat que YouTube Studio — titres + stats individuelles.
+    """
     from googleapiclient.discovery import build
 
-    youtube           = build("youtube", "v3", credentials=creds)
-    youtube_analytics = build("youtubeAnalytics", "v2", credentials=creds)
+    youtube = build("youtube", "v3", credentials=creds)
 
+    # 1. Chaîne
     channel_resp = youtube.channels().list(part="id,statistics,snippet", mine=True).execute()
     items = channel_resp.get("items", [])
     if not items:
@@ -34,32 +37,49 @@ def get_youtube_stats(creds):
     channel_name = channel.get("snippet", {}).get("title", "")
     subscribers  = int(channel["statistics"].get("subscriberCount", 0))
 
-    end_date   = datetime.date.today()
-    start_date = end_date - datetime.timedelta(days=DAYS_TO_FETCH)
-
-    analytics = youtube_analytics.reports().query(
-        ids=f"channel=={channel_id}",
-        startDate=str(start_date),
-        endDate=str(end_date),
-        metrics="views,likes,comments,shares",
-        dimensions="day"
+    # 2. Vidéos récentes
+    search_resp = youtube.search().list(
+        channelId=channel_id,
+        part="id",
+        type="video",
+        order="date",
+        maxResults=min(DAYS_TO_FETCH * 3, 50)
     ).execute()
 
+    video_ids = [
+        item["id"]["videoId"]
+        for item in search_resp.get("items", [])
+        if item.get("id", {}).get("videoId")
+    ]
+    if not video_ids:
+        return []
+
+    # 3. Stats détaillées
+    vids_resp = youtube.videos().list(
+        id=",".join(video_ids),
+        part="statistics,snippet"
+    ).execute()
+
+    cutoff  = datetime.date.today() - datetime.timedelta(days=DAYS_TO_FETCH)
     results = []
-    for row in analytics.get("rows", []):
-        date_str, views, likes, comments, shares = row
+
+    for item in vids_resp.get("items", []):
+        pub_date = item["snippet"]["publishedAt"][:10]
+        if pub_date < str(cutoff):
+            continue
+        s = item["statistics"]
         results.append({
-            "plateforme":   "YouTube",
-            "date":         date_str,
-            "titre":        "—",
-            "format":       "Video",
-            "vues":         int(views),
-            "reach":        int(views),
-            "abonnes":      subscribers,
-            "likes":        int(likes),
-            "commentaires": int(comments),
-            "partages":     int(shares),
-            "sauvegardes":  0,
+            "plateforme":    "YouTube",
+            "date":          pub_date,
+            "titre":         item["snippet"]["title"][:50],
+            "format":        "Short" if item["snippet"].get("categoryId") == "22" else "Video",
+            "vues":          int(s.get("viewCount",    0)),
+            "reach":         int(s.get("viewCount",    0)),
+            "abonnes":       subscribers,
+            "likes":         int(s.get("likeCount",    0)),
+            "commentaires":  int(s.get("commentCount", 0)),
+            "partages":      0,
+            "sauvegardes":   0,
             "_channel_name": channel_name,
             "_channel_id":   channel_id,
         })
