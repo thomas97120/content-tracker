@@ -463,18 +463,38 @@
 
   .hidden { display: none !important; }
 
-  .connect-btn {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    width: 100%; padding: 13px;
-    border-radius: var(--r-sm); border: 1px solid var(--border);
-    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
-    cursor: pointer; transition: opacity 0.15s;
-    text-decoration: none; color: var(--text);
+  /* ── COMPTES CONNECTÉS ─────────────────────────── */
+  .account-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
   }
-  .connect-btn:active { opacity: 0.8; }
-  .connect-btn.google { background: #fff; color: #222; border-color: #ddd; }
-  .connect-btn.meta   { background: #1877f2; color: #fff; border-color: transparent; }
-  .connect-btn.connected { background: rgba(61,220,132,0.12); color: var(--green); border-color: rgba(61,220,132,0.3); }
+  .account-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .account-info { display: flex; align-items: center; gap: 12px; }
+  .account-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .account-icon.yt { background: rgba(255,0,0,.13); }
+  .account-icon.ig { background: rgba(225,48,108,.13); }
+  .account-icon.fb { background: rgba(24,119,242,.13); }
+  .account-name  { font-size: 14px; font-weight: 500; line-height: 1.2; }
+  .account-badge {
+    font-size: 11px; font-weight: 500; padding: 2px 7px;
+    border-radius: 20px; margin-top: 3px; display: inline-block;
+  }
+  .account-badge.on  { background: rgba(61,220,132,.15);  color: var(--green); }
+  .account-badge.off { background: rgba(107,107,128,.12); color: var(--muted); }
+  .account-badge.key { background: rgba(124,106,255,.15); color: var(--accent); }
+  .account-action {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 13px; border-radius: 8px; font-size: 12px; font-weight: 500;
+    text-decoration: none; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); white-space: nowrap;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+  }
+  .account-action.primary { background: var(--accent); color: #fff; border-color: transparent; }
+  .account-action:active  { opacity: 0.8; }
 </style>
 </head>
 <body>
@@ -844,21 +864,45 @@
 
     <!-- Connecter mes comptes (OAuth) -->
     <div class="card">
-      <div class="card-title">🔗 Connecter mes comptes</div>
-      <div class="form-stack">
-        <div style="font-size:12px;color:var(--muted);line-height:1.6">
-          Connecte tes comptes directement. Tes tokens sont stockés chiffrés côté serveur.
+      <div class="card-title">🔗 Comptes connectés</div>
+
+      <!-- YouTube -->
+      <div class="account-row">
+        <div class="account-info">
+          <div class="account-icon yt">▶️</div>
+          <div>
+            <div class="account-name">YouTube</div>
+            <span class="account-badge off" id="badge-youtube">Non connecté</span>
+          </div>
         </div>
-        <a class="connect-btn google" id="btn-connect-google"
-           href="/api/auth/google/connect">
-          <span>▶️</span> Connecter YouTube
-        </a>
-        <a class="connect-btn meta" id="btn-connect-meta"
-           href="/api/auth/meta/connect">
-          <span>📘</span> Connecter Instagram / Facebook
-        </a>
-        <div id="connect-status" style="font-size:12px;color:var(--green);text-align:center;display:none"></div>
+        <a class="account-action primary" id="btn-connect-google" href="/api/auth/google/connect">Connecter</a>
       </div>
+
+      <!-- Instagram -->
+      <div class="account-row">
+        <div class="account-info">
+          <div class="account-icon ig">📸</div>
+          <div>
+            <div class="account-name">Instagram</div>
+            <span class="account-badge off" id="badge-instagram">Non connecté</span>
+          </div>
+        </div>
+        <a class="account-action primary" id="btn-connect-meta" href="/api/auth/meta/connect">Connecter</a>
+      </div>
+
+      <!-- Facebook (partagé avec Meta token) -->
+      <div class="account-row">
+        <div class="account-info">
+          <div class="account-icon fb">📘</div>
+          <div>
+            <div class="account-name">Facebook</div>
+            <span class="account-badge off" id="badge-facebook">Non connecté</span>
+          </div>
+        </div>
+        <div id="badge-fb-action"></div>
+      </div>
+
+      <div id="connect-status" style="font-size:12px;text-align:center;display:none;margin-top:12px;padding:8px;border-radius:8px"></div>
     </div>
 
     <!-- Clés API -->
@@ -1689,15 +1733,46 @@
           if (el) el.textContent = data[key] ? `Actuel : ${data[key]}` : 'Non configuré';
         }
 
-        // Met à jour l'état des boutons connect
-        if (data['google_token']) {
-          const btn = document.getElementById('btn-connect-google');
-          if (btn) { btn.className = 'connect-btn connected'; btn.textContent = '✅ YouTube connecté'; }
+        // ── Badges de connexion ──
+        const ytOAuth = data['google_token'];
+        const ytKey   = data['youtube_api_key'];
+        const metaTok = data['meta_access_token'];
+        const igId    = data['instagram_business_id'];
+        const fbId    = data['facebook_page_id'];
+
+        // YouTube
+        const badgeYT = document.getElementById('badge-youtube');
+        const btnYT   = document.getElementById('btn-connect-google');
+        if (ytOAuth === 'connecté') {
+          if (badgeYT) { badgeYT.className = 'account-badge on'; badgeYT.textContent = '✅ OAuth connecté'; }
+          if (btnYT)   { btnYT.className = 'account-action'; btnYT.textContent = 'Reconnecter'; }
+        } else if (ytKey && ytKey !== 'Non configuré') {
+          if (badgeYT) { badgeYT.className = 'account-badge key'; badgeYT.textContent = '🔑 Clé API'; }
+          if (btnYT)   { btnYT.className = 'account-action'; btnYT.textContent = 'Connecter OAuth'; }
+        } else {
+          if (badgeYT) { badgeYT.className = 'account-badge off'; badgeYT.textContent = 'Non connecté'; }
+          if (btnYT)   { btnYT.className = 'account-action primary'; btnYT.textContent = 'Connecter'; }
         }
-        if (data['meta_access_token']) {
-          const btn = document.getElementById('btn-connect-meta');
-          if (btn) { btn.className = 'connect-btn connected'; btn.textContent = '✅ Instagram/Facebook connecté'; }
+
+        // Instagram
+        const badgeIG = document.getElementById('badge-instagram');
+        const btnMeta = document.getElementById('btn-connect-meta');
+        if (metaTok && metaTok !== 'Non configuré') {
+          if (badgeIG) { badgeIG.className = 'account-badge on'; badgeIG.textContent = igId && igId !== 'Non configuré' ? '✅ Connecté' : '⚠️ Token OK, ID manquant'; }
+          if (btnMeta) { btnMeta.className = 'account-action'; btnMeta.textContent = 'Reconnecter'; }
+        } else {
+          if (badgeIG) { badgeIG.className = 'account-badge off'; badgeIG.textContent = 'Non connecté'; }
+          if (btnMeta) { btnMeta.className = 'account-action primary'; btnMeta.textContent = 'Connecter'; }
         }
+
+        // Facebook (même token que Meta)
+        const badgeFB = document.getElementById('badge-facebook');
+        if (metaTok && metaTok !== 'Non configuré') {
+          if (badgeFB) { badgeFB.className = 'account-badge on'; badgeFB.textContent = fbId && fbId !== 'Non configuré' ? '✅ Connecté' : '⚠️ Token OK, Page ID manquant'; }
+        } else {
+          if (badgeFB) { badgeFB.className = 'account-badge off'; badgeFB.textContent = 'Non connecté'; }
+        }
+
       } catch (e) {}
     }
 
@@ -1729,9 +1804,10 @@
     function showOAuthStatus(msg, isError) {
       const el = document.getElementById('connect-status');
       if (!el) return;
-      el.textContent    = msg;
-      el.style.color    = isError ? 'var(--red)' : 'var(--green)';
-      el.style.display  = 'block';
+      el.textContent       = msg;
+      el.style.color       = isError ? 'var(--red)'   : 'var(--green)';
+      el.style.background  = isError ? 'rgba(255,85,85,.1)' : 'rgba(61,220,132,.1)';
+      el.style.display     = 'block';
       setTimeout(() => { el.style.display = 'none'; }, 5000);
     }
 
