@@ -608,6 +608,51 @@
 /* Post row — more info */
 .post-stats { display:flex; gap:10px; margin-top:4px; flex-wrap:wrap; }
 .post-stat  { font-size:11px; color:var(--muted); }
+
+/* ── TOAST ───────────────────────────────────── */
+#toast-container {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none;
+}
+.toast {
+  padding: 10px 18px; border-radius: 20px; font-size: 13px; font-weight: 500;
+  backdrop-filter: blur(12px); pointer-events: auto;
+  animation: toastIn .25s ease, toastOut .3s ease 2.3s forwards;
+  white-space: nowrap;
+}
+.toast.success { background: rgba(61,220,132,.2); color: var(--green); border: 1px solid rgba(61,220,132,.3); }
+.toast.error   { background: rgba(255,85,85,.2);  color: var(--red);   border: 1px solid rgba(255,85,85,.3); }
+.toast.info    { background: rgba(124,106,255,.2); color: var(--accent); border: 1px solid rgba(124,106,255,.3); }
+@keyframes toastIn  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes toastOut { to   { opacity:0; transform:translateY(10px); } }
+
+/* ── PULL-TO-REFRESH ─────────────────────────── */
+#pull-indicator {
+  position: fixed; top: 52px; left: 50%; transform: translateX(-50%) translateY(-60px);
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 20px; padding: 6px 16px;
+  font-size: 12px; color: var(--muted);
+  transition: transform .2s; z-index: 50;
+  pointer-events: none;
+}
+#pull-indicator.visible { transform: translateX(-50%) translateY(8px); }
+
+/* ── REFRESH BTN ─────────────────────────────── */
+.topbar-refresh {
+  font-size: 18px; background: none; border: none; cursor: pointer;
+  color: var(--muted); padding: 4px 8px; border-radius: 8px;
+  transition: color .15s, transform .3s;
+  line-height: 1;
+}
+.topbar-refresh:hover  { color: var(--text); }
+.topbar-refresh.spin   { animation: spin .7s linear infinite; }
+
+/* ── LAST UPDATED ────────────────────────────── */
+#last-updated {
+  font-size: 10px; color: var(--muted); text-align: right;
+  padding: 0 2px 2px; margin-top: -8px;
+}
 </style>
 </head>
 <body>
@@ -682,10 +727,16 @@
 ══════════════════════════════════════ -->
 <div id="app">
 
+  <!-- Pull indicator -->
+  <div id="pull-indicator">↓ Tirer pour rafraîchir</div>
+
   <!-- Top bar -->
   <div class="topbar">
     <div class="topbar-title" id="topbar-title">Content Tracker</div>
-    <div class="topbar-role" id="topbar-role">Créateur</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="topbar-refresh" id="refresh-btn" onclick="forceRefresh()" title="Rafraîchir">↺</button>
+      <div class="topbar-role" id="topbar-role">Créateur</div>
+    </div>
   </div>
 
   <!-- Zone scrollable -->
@@ -797,6 +848,31 @@
       <div id="best-hour-content"></div>
       <canvas id="hour-chart" height="140" style="margin-top:12px"></canvas>
     </div>
+
+    <!-- Jour de la semaine -->
+    <div class="card" id="weekday-card" style="display:none">
+      <div class="card-title">📅 Meilleur jour de la semaine</div>
+      <div id="weekday-content"></div>
+      <canvas id="weekday-chart" height="120" style="margin-top:10px"></canvas>
+    </div>
+
+    <!-- Comparaison format -->
+    <div class="card" id="format-card" style="display:none">
+      <div class="card-title">🎞 Performance par format</div>
+      <div id="format-content"></div>
+    </div>
+
+    <!-- Répartition plateformes -->
+    <div class="card" id="donut-card" style="display:none">
+      <div class="card-title">🍩 Répartition des vues</div>
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+        <canvas id="donut-chart" width="140" height="140" style="flex-shrink:0"></canvas>
+        <div id="donut-legend" style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </div>
+
+    <!-- Last updated -->
+    <div id="last-updated"></div>
   </div>
 
   <!-- ── PAGE : SAISIE ── -->
@@ -1250,6 +1326,8 @@
 
 </div><!-- /#app -->
 
+<div id="toast-container"></div>
+
     <script>
 
     // ══════════════════════════════════════════════
@@ -1284,6 +1362,106 @@
       if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
       if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
       return String(n);
+    }
+
+    // ══════════════════════════════════════════════
+    // TOAST
+    // ══════════════════════════════════════════════
+    function toast(msg, type = 'info') {
+      const c = document.getElementById('toast-container');
+      const t = document.createElement('div');
+      t.className = `toast ${type}`;
+      t.textContent = msg;
+      c.appendChild(t);
+      setTimeout(() => t.remove(), 2700);
+    }
+
+    // ══════════════════════════════════════════════
+    // COUNT-UP ANIMATION
+    // ══════════════════════════════════════════════
+    function animateCount(el, end, duration = 700, fmtFn) {
+      if (!el || isNaN(end) || end === 0) return;
+      const start = 0;
+      const startTime = performance.now();
+      function step(now) {
+        const pct = Math.min((now - startTime) / duration, 1);
+        // ease-out cubic
+        const eased = 1 - Math.pow(1 - pct, 3);
+        const val = start + (end - start) * eased;
+        el.textContent = fmtFn ? fmtFn(val) : fmt(Math.round(val));
+        if (pct < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    // ══════════════════════════════════════════════
+    // PULL-TO-REFRESH
+    // ══════════════════════════════════════════════
+    let _pullStartY = 0;
+    let _pulling    = false;
+    const _container = () => document.getElementById('page-container');
+    const _pullEl    = () => document.getElementById('pull-indicator');
+
+    document.addEventListener('touchstart', e => {
+      if (_container().scrollTop === 0) {
+        _pullStartY = e.touches[0].clientY;
+        _pulling = true;
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+      if (!_pulling) return;
+      const dy = e.touches[0].clientY - _pullStartY;
+      if (dy > 50) _pullEl()?.classList.add('visible');
+    }, { passive: true });
+
+    document.addEventListener('touchend', e => {
+      if (!_pulling) return;
+      _pulling = false;
+      const el = _pullEl();
+      if (el?.classList.contains('visible')) {
+        el.classList.remove('visible');
+        forceRefresh();
+      }
+    });
+
+    // ══════════════════════════════════════════════
+    // FORCE REFRESH (bypass cache)
+    // ══════════════════════════════════════════════
+    let _isRefreshing = false;
+    async function forceRefresh() {
+      if (_isRefreshing) return;
+      _isRefreshing = true;
+      const btn = document.getElementById('refresh-btn');
+      if (btn) btn.classList.add('spin');
+      showStatsSkeleton();
+      try {
+        const resp = await fetch(
+          `${API}/api/stats/${encodeURIComponent(viewedCreator)}?days=${currentDays}&refresh=1`,
+          { credentials: 'include' }
+        );
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error);
+        allStats    = data.stats    || {};
+        prevStats   = data.prev_stats || {};
+        allAccounts = data.accounts || {};
+        renderSummary(); renderPlatformPills(); renderPosts();
+        toast('Stats à jour ✓', 'success');
+        updateLastUpdated();
+      } catch (e) {
+        toast('Erreur de rechargement', 'error');
+      } finally {
+        _isRefreshing = false;
+        if (btn) btn.classList.remove('spin');
+      }
+    }
+
+    // Last updated timestamp
+    let _lastUpdated = null;
+    function updateLastUpdated() {
+      _lastUpdated = new Date();
+      const el = document.getElementById('last-updated');
+      if (el) el.textContent = 'Mis à jour à ' + _lastUpdated.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
     }
 
     function showStatsSkeleton() {
@@ -1552,6 +1730,7 @@
       renderSummary();
       renderPlatformPills();
       renderPosts();
+      updateLastUpdated();
     }
 
     async function fetchCreatorList() {
@@ -1638,7 +1817,23 @@
     function setKpi(id, val, formatted, prevVal) {
       const el = document.getElementById(id);
       if (!el) return;
-      el.innerHTML = formatted + (prevVal !== undefined ? ' ' + deltaHTML(val, prevVal) : '');
+      const delta = prevVal !== undefined ? ' ' + deltaHTML(val, prevVal) : '';
+      // Animate numeric KPIs
+      if (typeof val === 'number' && val > 0 && !formatted.includes('%')) {
+        el.innerHTML = '0' + delta;
+        const numEl = document.createElement('span');
+        numEl.textContent = '0';
+        el.innerHTML = '';
+        el.appendChild(numEl);
+        if (delta) el.insertAdjacentHTML('beforeend', delta);
+        animateCount(numEl, val, 700, v => {
+          if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+          if (v >= 1000)    return (v / 1000).toFixed(1) + 'K';
+          return String(Math.round(v));
+        });
+      } else {
+        el.innerHTML = formatted + delta;
+      }
     }
 
     // 🔢 Stats globales
@@ -1759,19 +1954,23 @@
       };
       const dotColor = platformColors[currentPlatform] || 'var(--accent)';
 
-      list.innerHTML = posts.map(p => {
+      // Calcule la moyenne de vues pour badge "above avg"
+      const avgVuesPlat = posts.length ? posts.reduce((s, p) => s + (p.vues || 0), 0) / posts.length : 0;
+
+      list.innerHTML = posts.map((p, i) => {
         const eng = p.taux_eng
           ? p.taux_eng
           : (p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100) : 0);
         const titre = (!p.titre || p.titre === '—')
           ? (p.format === 'Video' || p.format === 'Short' ? `📅 ${p.date}` : p.format || '—')
           : p.titre;
-        const idx = i;
+        const aboveAvg = avgVuesPlat > 0 && (p.vues || 0) >= avgVuesPlat * 1.5;
+        const aboveTag = aboveAvg ? `<span style="font-size:10px;background:rgba(61,220,132,.15);color:var(--green);padding:1px 6px;border-radius:10px;margin-left:5px">🔥 top</span>` : '';
         return `
-      <div class="post-row" style="cursor:pointer" onclick="openDrawer(${idx})">
+      <div class="post-row" style="cursor:pointer" onclick="openDrawer(${i})">
         <div class="post-dot" style="background:${dotColor}"></div>
         <div class="post-info" style="flex:1;min-width:0">
-          <div class="post-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titre}</div>
+          <div class="post-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titre}${aboveTag}</div>
           <div class="post-meta">${p.date || ''} · ${fmt(p.vues)} vues · ${fmt(p.likes)} ❤️</div>
           <div class="post-stats">
             <span class="post-stat">💬 ${fmt(p.commentaires || 0)}</span>
@@ -1786,6 +1985,9 @@
 
       renderChart();
       renderHourChart();
+      renderWeekdayChart();
+      renderFormatChart();
+      renderPlatformDonut();
     }
 
 
@@ -2050,6 +2252,9 @@
     async function swipe(decision) {
       const pending = ideas.filter(i => !i.decided);
       if (!pending.length) return;
+
+      // Haptic feedback
+      if (navigator.vibrate) navigator.vibrate(decision === 'approve' ? [10,0,10] : [20]);
 
       const idea = pending[0];
       const card = document.getElementById('idea-card');
@@ -2545,6 +2750,178 @@
               ticks: { color: '#6b6b80', font: { size: 11 }, callback: v => v >= 1000 ? (v/1000).toFixed(1)+'K' : v },
               grid:  { color: 'rgba(255,255,255,0.05)' }
             }
+          }
+        }
+      });
+    }
+
+
+    // ══════════════════════════════════════════════
+    // JOUR DE LA SEMAINE
+    // ══════════════════════════════════════════════
+    let _weekdayChart = null;
+    const WEEKDAYS_FR = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+
+    function renderWeekdayChart() {
+      const card = document.getElementById('weekday-card');
+      if (!card) return;
+
+      const posts = _allPosts().filter(p => p.date);
+      if (posts.length < 4) { card.style.display = 'none'; return; }
+
+      const byDay = Array.from({length: 7}, () => ({ vues: 0, n: 0 }));
+      for (const p of posts) {
+        const d = new Date(p.date).getDay(); // 0=dim
+        byDay[d].vues += (p.vues || 0);
+        byDay[d].n    += 1;
+      }
+
+      const avgVues = byDay.map(b => b.n ? Math.round(b.vues / b.n) : null);
+      let bestD = 0, bestV = -1;
+      avgVues.forEach((v, d) => { if (v != null && v > bestV) { bestV = v; bestD = d; } });
+
+      const content = document.getElementById('weekday-content');
+      if (content) {
+        content.innerHTML = `<p style="color:#6b6b80;font-size:13px;margin:0 0 10px">
+          Meilleur jour : <strong style="color:#ff6aad">${WEEKDAYS_FR[bestD]}</strong> · ${fmt(bestV)} vues moy.</p>`;
+      }
+      card.style.display = '';
+
+      const canvas = document.getElementById('weekday-chart');
+      if (!canvas) return;
+      if (_weekdayChart) _weekdayChart.destroy();
+      _weekdayChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: WEEKDAYS_FR,
+          datasets: [{
+            data: avgVues,
+            backgroundColor: avgVues.map((v, i) => i === bestD && v != null ? '#ff6aad' : 'rgba(255,106,173,0.4)'),
+            borderRadius: 5,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? fmt(ctx.parsed.y) + ' vues moy.' : 'Aucun post' } }
+          },
+          scales: {
+            x: { ticks: { color: '#6b6b80', font: { size: 12 } }, grid: { display: false } },
+            y: { ticks: { color: '#6b6b80', font: { size: 11 }, callback: v => v >= 1000 ? (v/1000).toFixed(1)+'K' : v },
+                 grid: { color: 'rgba(255,255,255,0.05)' } }
+          }
+        }
+      });
+    }
+
+
+    // ══════════════════════════════════════════════
+    // PERFORMANCE PAR FORMAT
+    // ══════════════════════════════════════════════
+    function renderFormatChart() {
+      const card = document.getElementById('format-card');
+      const content = document.getElementById('format-content');
+      if (!card || !content) return;
+
+      const posts = _allPosts();
+      const byFormat = {};
+      for (const p of posts) {
+        const f = p.format || 'Autre';
+        if (!byFormat[f]) byFormat[f] = { vues: 0, eng: 0, n: 0 };
+        byFormat[f].vues += (p.vues || 0);
+        byFormat[f].n    += 1;
+        const eng = p.vues > 0 ? ((p.likes||0)+(p.commentaires||0)+(p.partages||0)) / p.vues * 100 : 0;
+        byFormat[f].eng  += eng;
+      }
+
+      const entries = Object.entries(byFormat)
+        .filter(([, b]) => b.n >= 1)
+        .map(([f, b]) => ({ f, avgVues: Math.round(b.vues / b.n), avgEng: +(b.eng / b.n).toFixed(1), n: b.n }))
+        .sort((a, b) => b.avgVues - a.avgVues);
+
+      if (entries.length < 2) { card.style.display = 'none'; return; }
+
+      const maxVues = entries[0].avgVues || 1;
+      const formatEmoji = { Short: '⚡', Video: '▶️', Reel: '🎬', Story: '📱', Post: '🖼', IMAGE: '🖼', VIDEO: '▶️', CAROUSEL_ALBUM: '🗂' };
+
+      content.innerHTML = entries.map(e => {
+        const pct = Math.round(e.avgVues / maxVues * 100);
+        const emoji = formatEmoji[e.f] || '📄';
+        return `
+          <div style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span style="font-size:13px;font-weight:500">${emoji} ${e.f}</span>
+              <span style="font-size:12px;color:var(--muted)">${fmt(e.avgVues)} vues · ${e.avgEng}% eng · ${e.n} post${e.n>1?'s':''}</span>
+            </div>
+            <div style="height:8px;background:var(--surface);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;transition:width .6s ease"></div>
+            </div>
+          </div>`;
+      }).join('');
+
+      card.style.display = '';
+    }
+
+
+    // ══════════════════════════════════════════════
+    // DONUT — RÉPARTITION VUES PAR PLATEFORME
+    // ══════════════════════════════════════════════
+    let _donutChart = null;
+
+    function renderPlatformDonut() {
+      const card = document.getElementById('donut-card');
+      if (!card) return;
+
+      const plats = Object.keys(allStats).filter(p => allStats[p]?.length);
+      if (plats.length < 2) { card.style.display = 'none'; return; }
+
+      const platColors = {
+        Instagram: '#e1306c', YouTube: '#ff0000',
+        TikTok: '#69c9d0', Facebook: '#1877f2', Snapchat: '#e6d800'
+      };
+      const data = plats.map(p => allStats[p].reduce((s, v) => s + (v.vues || 0), 0));
+      const total = data.reduce((a, b) => a + b, 0);
+      if (!total) { card.style.display = 'none'; return; }
+
+      card.style.display = '';
+
+      // Legend
+      const legend = document.getElementById('donut-legend');
+      if (legend) {
+        legend.innerHTML = plats.map((p, i) => {
+          const pct = Math.round(data[i] / total * 100);
+          return `
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="width:10px;height:10px;border-radius:50%;background:${platColors[p] || '#7c6aff'};flex-shrink:0"></div>
+              <div style="flex:1;font-size:13px">${p}</div>
+              <div style="font-size:13px;font-weight:600;font-family:'DM Mono',monospace">${pct}%</div>
+            </div>
+            <div style="height:4px;background:var(--surface);border-radius:2px;overflow:hidden;margin-top:2px;margin-bottom:4px">
+              <div style="height:100%;width:${pct}%;background:${platColors[p] || '#7c6aff'};border-radius:2px"></div>
+            </div>`;
+        }).join('');
+      }
+
+      const canvas = document.getElementById('donut-chart');
+      if (!canvas) return;
+      if (_donutChart) _donutChart.destroy();
+      _donutChart = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: plats,
+          datasets: [{
+            data,
+            backgroundColor: plats.map(p => platColors[p] || '#7c6aff'),
+            borderColor: '#1a1a24',
+            borderWidth: 3,
+            hoverOffset: 6,
+          }]
+        },
+        options: {
+          cutout: '68%',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmt(ctx.parsed)} vues (${Math.round(ctx.parsed/total*100)}%)` } }
           }
         }
       });

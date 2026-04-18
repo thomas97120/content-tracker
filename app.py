@@ -714,14 +714,16 @@ def get_stats(creator):
         get_instagram_stats, get_facebook_stats, get_tiktok_stats,
     )
 
-    days = int(request.args.get("days", 7))
-    compare = request.args.get("compare", "1") != "0"  # comparaison activée par défaut
+    days    = int(request.args.get("days", 7))
+    compare = request.args.get("compare", "1") != "0"
+    refresh = request.args.get("refresh") == "1"  # force bypass cache
 
     # Cache
     cache_key = f"{creator}_{days}_{'c' if compare else 'n'}"
-    cached = _stats_cache.get(cache_key)
-    if cached and (time.time() - cached[0]) < CACHE_TTL:
-        return jsonify(cached[1])
+    if not refresh:
+        cached = _stats_cache.get(cache_key)
+        if cached and (time.time() - cached[0]) < CACHE_TTL:
+            return jsonify(cached[1])
 
     fetch_days = days * 2 if compare else days
 
