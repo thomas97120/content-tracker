@@ -217,25 +217,29 @@ def get_tiktok_stats(token_json: str, days=None):
         "Content-Type":  "application/json",
     }
 
-    # 1. Infos utilisateur
-    _ur = requests.get(
-        "https://open.tiktokapis.com/v2/user/info/",
-        headers=headers,
-        params={"fields": "open_id,display_name,username,follower_count"}
-    )
-    print(f"TikTok user/info status={_ur.status_code} body={_ur.text[:300]}")
-    try:
-        user_resp = _ur.json()
-    except Exception:
-        raise ValueError(f"TikTok user/info HTTP {_ur.status_code}: {_ur.text[:200] or 'réponse vide'}")
-
-    err_code = user_resp.get("error", {}).get("code", "ok")
-    if err_code != "ok":
-        raise ValueError(f"TikTok user/info erreur: {err_code} — {user_resp.get('error', {}).get('message', '')}")
-
-    u          = user_resp.get("data", {}).get("user", {})
-    followers  = u.get("follower_count", 0)
-    disp_name  = u.get("display_name") or u.get("username", "TikTok")
+    # 1. Infos utilisateur — tente avec follower_count, fallback sans
+    followers = 0
+    disp_name = "TikTok"
+    for fields in ["open_id,display_name,username,follower_count", "open_id,display_name,username"]:
+        _ur = requests.get(
+            "https://open.tiktokapis.com/v2/user/info/",
+            headers=headers,
+            params={"fields": fields}
+        )
+        print(f"TikTok user/info status={_ur.status_code} body={_ur.text[:300]}")
+        try:
+            user_resp = _ur.json()
+        except Exception:
+            raise ValueError(f"TikTok user/info HTTP {_ur.status_code}: {_ur.text[:200] or 'réponse vide'}")
+        err_code = user_resp.get("error", {}).get("code", "ok")
+        if err_code == "scope_not_authorized" and "follower_count" in fields:
+            continue  # réessaie sans follower_count
+        if err_code != "ok":
+            raise ValueError(f"TikTok user/info erreur: {err_code} — {user_resp.get('error', {}).get('message', '')}")
+        u         = user_resp.get("data", {}).get("user", {})
+        followers = u.get("follower_count", 0)
+        disp_name = u.get("display_name") or u.get("username", "TikTok")
+        break
 
     # 2. Liste vidéos
     _vr = requests.post(
