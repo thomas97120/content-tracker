@@ -84,13 +84,16 @@ def get_youtube_stats(creds, days=None):
     results = []
 
     for item in vids_resp.get("items", []):
-        pub_date = item["snippet"]["publishedAt"][:10]
+        pub_iso  = item["snippet"]["publishedAt"]  # 2024-01-15T14:30:00Z
+        pub_date = pub_iso[:10]
+        pub_hour = int(pub_iso[11:13]) if len(pub_iso) > 13 else None
         if pub_date < str(cutoff):
             continue
         s = item["statistics"]
         results.append({
             "plateforme":    "YouTube",
             "date":          pub_date,
+            "hour":          pub_hour,
             "titre":         item["snippet"]["title"][:50],
             "format":        _yt_format(item),
             "vues":          int(s.get("viewCount",    0)),
@@ -270,12 +273,15 @@ def get_tiktok_stats(token_json: str, days=None):
     results = []
 
     for v in video_resp.get("data", {}).get("videos", []):
-        pub_date = datetime.date.fromtimestamp(v.get("create_time", 0)).isoformat()
+        ts       = v.get("create_time", 0)
+        pub_date = datetime.date.fromtimestamp(ts).isoformat()
+        pub_hour = datetime.datetime.fromtimestamp(ts).hour if ts else None
         if pub_date < str(cutoff):
             continue
         results.append({
             "plateforme":    "TikTok",
             "date":          pub_date,
+            "hour":          pub_hour,
             "titre":         (v.get("title") or "TikTok")[:50],
             "format":        "Video",
             "vues":          v.get("view_count",    0),

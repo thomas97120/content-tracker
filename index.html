@@ -780,8 +780,22 @@
     </div>
 
     <div class="card" id="chart-card">
-      <div class="card-title">📈 Évolution des vues</div>
-      <canvas id="views-chart" height="180"></canvas>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">📈 Évolution</div>
+        <div style="display:flex;gap:6px">
+          <button class="sort-btn active" id="chart-metric-views" onclick="setChartMetric('vues')">Vues</button>
+          <button class="sort-btn" id="chart-metric-likes" onclick="setChartMetric('likes')">Likes</button>
+          <button class="sort-btn" id="chart-metric-eng"   onclick="setChartMetric('eng')">Eng.%</button>
+        </div>
+      </div>
+      <canvas id="views-chart" height="200"></canvas>
+    </div>
+
+    <!-- Meilleure heure -->
+    <div class="card" id="best-hour-card" style="display:none">
+      <div class="card-title">🕐 Meilleure heure pour poster</div>
+      <div id="best-hour-content"></div>
+      <canvas id="hour-chart" height="140" style="margin-top:12px"></canvas>
     </div>
   </div>
 
@@ -1771,6 +1785,7 @@
       }).join('');
 
       renderChart();
+      renderHourChart();
     }
 
 
@@ -2335,25 +2350,65 @@
 
 
     // ══════════════════════════════════════════════
-    // GRAPHIQUE ÉVOLUTION DES VUES
+    // GRAPHIQUE ÉVOLUTION — multi-métrique
     // ══════════════════════════════════════════════
-    let _chart = null;
+    let _chart      = null;
+    let _chartMetric = 'vues';  // 'vues' | 'likes' | 'eng'
+
+    const METRIC_CONFIG = {
+      vues:  { label: 'Vues',      color: '#7c6aff', bg: 'rgba(124,106,255,0.12)' },
+      likes: { label: 'Likes',     color: '#ff6aad', bg: 'rgba(255,106,173,0.12)' },
+      eng:   { label: 'Eng.%',     color: '#6affd4', bg: 'rgba(106,255,212,0.12)' },
+    };
+
+    function setChartMetric(metric) {
+      _chartMetric = metric;
+      // toggle active button
+      ['views','likes','eng'].forEach(k => {
+        const btn = document.getElementById('chart-metric-' + k);
+        if (btn) btn.classList.remove('active');
+      });
+      const active = document.getElementById(
+        metric === 'vues' ? 'chart-metric-views' :
+        metric === 'likes' ? 'chart-metric-likes' : 'chart-metric-eng'
+      );
+      if (active) active.classList.add('active');
+      renderChart();
+    }
+
+    function _allPosts() {
+      const posts = [];
+      for (const ps of Object.values(allStats)) posts.push(...ps);
+      return posts;
+    }
 
     function renderChart() {
       const canvas = document.getElementById('views-chart');
       if (!canvas) return;
 
-      // Agrège vues par date toutes plateformes
+      const posts  = _allPosts();
+      const cfg    = METRIC_CONFIG[_chartMetric] || METRIC_CONFIG.vues;
       const byDate = {};
-      for (const posts of Object.values(allStats)) {
-        for (const p of posts) {
-          if (!p.date) continue;
-          byDate[p.date] = (byDate[p.date] || 0) + (p.vues || 0);
+
+      for (const p of posts) {
+        if (!p.date) continue;
+        if (_chartMetric === 'eng') {
+          // accumulate sum + count for avg eng%
+          if (!byDate[p.date]) byDate[p.date] = { sum: 0, n: 0 };
+          const eng = p.vues > 0 ? ((p.likes||0)+(p.commentaires||0)+(p.partages||0)) / p.vues * 100 : 0;
+          byDate[p.date].sum += eng;
+          byDate[p.date].n   += 1;
+        } else {
+          byDate[p.date] = (byDate[p.date] || 0) + (p[_chartMetric] || 0);
         }
       }
 
       const labels = Object.keys(byDate).sort();
-      const values = labels.map(d => byDate[d]);
+      const values = labels.map(d =>
+        _chartMetric === 'eng'
+          ? +(byDate[d].sum / byDate[d].n).toFixed(2)
+          : byDate[d]
+      );
 
       if (!labels.length) {
         document.getElementById('chart-card').style.display = 'none';
@@ -2367,10 +2422,10 @@
         data: {
           labels,
           datasets: [{
-            label: 'Vues',
+            label: cfg.label,
             data: values,
-            borderColor: '#7c6aff',
-            backgroundColor: 'rgba(124,106,255,0.1)',
+            borderColor: cfg.color,
+            backgroundColor: cfg.bg,
             borderWidth: 2,
             pointRadius: 3,
             fill: true,
@@ -2384,6 +2439,107 @@
             x: {
               ticks: { color: '#6b6b80', font: { size: 11 } },
               grid:  { color: 'rgba(255,255,255,0.05)' }
+            },
+            y: {
+              ticks: {
+                color: '#6b6b80', font: { size: 11 },
+                callback: v => _chartMetric === 'eng'
+                  ? v.toFixed(1) + '%'
+                  : v >= 1000 ? (v/1000).toFixed(1)+'K' : v
+              },
+              grid: { color: 'rgba(255,255,255,0.05)' }
+            }
+          }
+        }
+      });
+    }
+
+
+    // ══════════════════════════════════════════════
+    // MEILLEURE HEURE DE PUBLICATION
+    // ══════════════════════════════════════════════
+    let _hourChart = null;
+
+    function renderHourChart() {
+      const card = document.getElementById('best-hour-card');
+      if (!card) return;
+
+      const posts = _allPosts().filter(p => p.hour != null);
+      if (posts.length < 3) { card.style.display = 'none'; return; }
+
+      // Aggrège par heure : cumul vues + count
+      const byHour = Array.from({length: 24}, () => ({ vues: 0, eng: 0, n: 0 }));
+      for (const p of posts) {
+        const h   = p.hour;
+        const eng = p.vues > 0 ? ((p.likes||0)+(p.commentaires||0)+(p.partages||0)) / p.vues * 100 : 0;
+        byHour[h].vues += (p.vues || 0);
+        byHour[h].eng  += eng;
+        byHour[h].n    += 1;
+      }
+
+      // Moyenne vues par heure (heures sans posts → null)
+      const avgVues = byHour.map(b => b.n ? Math.round(b.vues / b.n) : null);
+      const avgEng  = byHour.map(b => b.n ? +(b.eng  / b.n).toFixed(2) : null);
+
+      // Meilleure heure (vues)
+      let bestH = 0, bestV = -1;
+      for (let h = 0; h < 24; h++) {
+        if (avgVues[h] != null && avgVues[h] > bestV) { bestV = avgVues[h]; bestH = h; }
+      }
+      const bestLabel = `${bestH}h–${(bestH+1)%24}h`;
+
+      // Summary text
+      const contentEl = document.getElementById('best-hour-content');
+      if (contentEl) {
+        contentEl.innerHTML =
+          `<p style="color:#6b6b80;font-size:13px;margin:0 0 12px">Basé sur ${posts.length} post(s) avec timestamp</p>` +
+          `<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">` +
+          `<div class="kpi-box" style="flex:1;min-width:120px;background:#1a1a2e;border-radius:12px;padding:14px;text-align:center">` +
+          `<div style="font-size:28px;font-weight:700;color:#7c6aff">${bestLabel}</div>` +
+          `<div style="font-size:12px;color:#6b6b80;margin-top:4px">Meilleure heure · Vues</div>` +
+          `</div></div>`;
+      }
+
+      card.style.display = '';
+
+      // Labels seulement pour les heures avec data
+      const labels = Array.from({length: 24}, (_, i) => `${i}h`);
+      const colors = avgVues.map((v, i) => i === bestH && v != null ? '#7c6aff' : 'rgba(124,106,255,0.45)');
+
+      const canvas = document.getElementById('hour-chart');
+      if (!canvas) return;
+      if (_hourChart) _hourChart.destroy();
+      _hourChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Vues moy.',
+            data: avgVues,
+            backgroundColor: colors,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => {
+                  const v = ctx.parsed.y;
+                  if (v == null) return 'Aucun post';
+                  const h   = ctx.dataIndex;
+                  const eng = avgEng[h];
+                  return [`Vues moy.: ${v >= 1000 ? (v/1000).toFixed(1)+'K' : v}`, `Eng.: ${eng}%`];
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#6b6b80', font: { size: 10 }, maxRotation: 0 },
+              grid:  { display: false }
             },
             y: {
               ticks: { color: '#6b6b80', font: { size: 11 }, callback: v => v >= 1000 ? (v/1000).toFixed(1)+'K' : v },
