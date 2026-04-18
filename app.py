@@ -420,19 +420,29 @@ def sync_all():
     """Sync global (env vars) ou par créateur si token présent."""
     try:
         from creator_apis import get_creator_apis
+        from collectors import get_youtube_stats_apikey
         from sheets import get_google_creds, write_stats_to_sheet, get_spreadsheet_id
 
-        creds    = get_google_creds()
         sheet_id = get_spreadsheet_id()
+        yt_stats, ig_stats, fb_stats = [], [], []
 
-        # YouTube : toujours via OAuth global
-        yt_stats = get_youtube_stats(creds)
-
-        # Instagram + Facebook : agrège tous les créateurs
-        ig_stats, fb_stats = [], []
         creators = get_all_creators()
         for creator in creators:
             c_apis = get_creator_apis(creator)
+
+            # YouTube : clé API par créateur si dispo, sinon OAuth global
+            yt_key = c_apis.get("youtube_api_key")
+            yt_cid = c_apis.get("youtube_channel_id")
+            if yt_key and yt_cid:
+                yt_stats += get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid)
+            else:
+                try:
+                    creds     = get_google_creds()
+                    yt_stats += get_youtube_stats(creds)
+                except Exception:
+                    pass
+
+            # Instagram + Facebook
             token  = c_apis.get("meta_access_token")
             ig_id  = c_apis.get("instagram_business_id")
             fb_id  = c_apis.get("facebook_page_id")
@@ -440,7 +450,12 @@ def sync_all():
             fb_stats += get_facebook_stats(token=token, page_id=fb_id)
 
         all_stats = yt_stats + ig_stats + fb_stats
-        write_stats_to_sheet(creds, sheet_id, all_stats)
+
+        try:
+            creds = get_google_creds()
+            write_stats_to_sheet(creds, sheet_id, all_stats)
+        except Exception as e:
+            print(f"Google Sheets write error : {e}")
 
         return jsonify({"synced": {
             "youtube":   len(yt_stats),

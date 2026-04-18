@@ -14,7 +14,7 @@ FACEBOOK_PAGE_ID      = os.environ.get("FACEBOOK_PAGE_ID", "")
 
 
 # ─────────────────────────────────────────────
-#  YOUTUBE
+#  YOUTUBE — OAuth (admin global)
 # ─────────────────────────────────────────────
 
 def get_youtube_stats(creds):
@@ -61,6 +61,83 @@ def get_youtube_stats(creds):
 
     except Exception as e:
         print(f"YouTube ERREUR : {e}")
+        return []
+
+
+# ─────────────────────────────────────────────
+#  YOUTUBE — API Key simple (par créateur)
+# ─────────────────────────────────────────────
+
+def get_youtube_stats_apikey(api_key=None, channel_id=None):
+    """
+    Stats YouTube via Data API v3 avec une simple clé API.
+    Pas besoin d'OAuth — accès aux données publiques de la chaîne.
+    Obtenir une clé : console.cloud.google.com → YouTube Data API v3.
+    """
+    if not api_key or not channel_id:
+        print("YouTube API Key : youtube_api_key ou youtube_channel_id manquant")
+        return []
+    try:
+        BASE   = "https://www.googleapis.com/youtube/v3"
+        params = {"key": api_key}
+
+        # Abonnés
+        ch_resp = requests.get(f"{BASE}/channels", params={
+            **params, "id": channel_id, "part": "statistics"
+        }).json()
+        if not ch_resp.get("items"):
+            print(f"YouTube API Key : channel '{channel_id}' introuvable")
+            return []
+        ch_stats    = ch_resp["items"][0]["statistics"]
+        subscribers = int(ch_stats.get("subscriberCount", 0))
+
+        # Dernières vidéos (IDs)
+        search_resp = requests.get(f"{BASE}/search", params={
+            **params, "channelId": channel_id, "part": "id",
+            "type": "video", "order": "date",
+            "maxResults": min(DAYS_TO_FETCH * 2, 50)
+        }).json()
+        video_ids = [
+            item["id"]["videoId"]
+            for item in search_resp.get("items", [])
+            if item.get("id", {}).get("videoId")
+        ]
+        if not video_ids:
+            return []
+
+        # Stats détaillées des vidéos
+        vids_resp = requests.get(f"{BASE}/videos", params={
+            **params,
+            "id":   ",".join(video_ids),
+            "part": "statistics,snippet"
+        }).json()
+
+        cutoff  = datetime.date.today() - datetime.timedelta(days=DAYS_TO_FETCH)
+        results = []
+
+        for item in vids_resp.get("items", []):
+            pub_date = item["snippet"]["publishedAt"][:10]
+            if pub_date < str(cutoff):
+                continue
+            s = item["statistics"]
+            results.append({
+                "plateforme":   "YouTube",
+                "date":         pub_date,
+                "titre":        item["snippet"]["title"][:40],
+                "format":       "Video",
+                "vues":         int(s.get("viewCount",    0)),
+                "reach":        int(s.get("viewCount",    0)),
+                "abonnes":      subscribers,
+                "likes":        int(s.get("likeCount",    0)),
+                "commentaires": int(s.get("commentCount", 0)),
+                "partages":     0,
+                "sauvegardes":  0,
+            })
+
+        return results
+
+    except Exception as e:
+        print(f"YouTube API Key ERREUR : {e}")
         return []
 
 

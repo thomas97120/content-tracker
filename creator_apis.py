@@ -13,6 +13,8 @@ ALLOWED_KEYS = {
     "meta_access_token",
     "instagram_business_id",
     "facebook_page_id",
+    "youtube_api_key",
+    "youtube_channel_id",
 }
 
 

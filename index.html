@@ -798,6 +798,18 @@
           <div class="stat-sub" id="api-fb-id-current" style="margin-top:4px"></div>
         </div>
 
+        <div class="form-group">
+          <div class="field-label">YouTube API Key</div>
+          <input type="password" id="api-yt-key" placeholder="Clé depuis console.cloud.google.com" autocomplete="off">
+          <div class="stat-sub" id="api-yt-key-current" style="margin-top:4px"></div>
+        </div>
+
+        <div class="form-group">
+          <div class="field-label">YouTube Channel ID</div>
+          <input type="text" id="api-yt-cid" placeholder="Ex: UCxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+          <div class="stat-sub" id="api-yt-cid-current" style="margin-top:4px"></div>
+        </div>
+
         <button class="btn btn-primary" onclick="saveMyApis()">💾 Sauvegarder mes clés</button>
         <div class="success-msg" id="api-success">✓ Clés sauvegardées !</div>
         <div class="login-error" id="api-error"></div>
@@ -1463,6 +1475,8 @@
           'meta_access_token':      'api-meta-token-current',
           'instagram_business_id':  'api-ig-id-current',
           'facebook_page_id':       'api-fb-id-current',
+          'youtube_api_key':        'api-yt-key-current',
+          'youtube_channel_id':     'api-yt-cid-current',
         };
         for (const [key, elId] of Object.entries(map)) {
           const el = document.getElementById(elId);
@@ -1475,6 +1489,8 @@
       const token = document.getElementById('api-meta-token').value.trim();
       const igId  = document.getElementById('api-ig-id').value.trim();
       const fbId  = document.getElementById('api-fb-id').value.trim();
+      const ytKey = document.getElementById('api-yt-key').value.trim();
+      const ytCid = document.getElementById('api-yt-cid').value.trim();
       const okEl  = document.getElementById('api-success');
       const errEl = document.getElementById('api-error');
       okEl.style.display  = 'none';
@@ -1484,6 +1500,8 @@
       if (token) body.meta_access_token      = token;
       if (igId)  body.instagram_business_id  = igId;
       if (fbId)  body.facebook_page_id       = fbId;
+      if (ytKey) body.youtube_api_key        = ytKey;
+      if (ytCid) body.youtube_channel_id     = ytCid;
 
       if (!Object.keys(body).length) {
         errEl.textContent   = 'Remplis au moins un champ.';
@@ -1505,6 +1523,8 @@
           document.getElementById('api-meta-token').value = '';
           document.getElementById('api-ig-id').value      = '';
           document.getElementById('api-fb-id').value      = '';
+          document.getElementById('api-yt-key').value     = '';
+          document.getElementById('api-yt-cid').value     = '';
           loadMyApis();
         } else {
           errEl.textContent   = data.error || 'Erreur';
