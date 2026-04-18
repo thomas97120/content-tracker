@@ -593,7 +593,7 @@ def meta_connect():
     session["oauth_creator"] = creator
 
     redirect_uri = f"{APP_URL}/api/auth/meta/callback"
-    scope        = "instagram_manage_insights,pages_show_list,pages_read_engagement"
+    scope        = "email,public_profile,instagram_basic,instagram_manage_insights,pages_show_list,pages_read_engagement"
     auth_url     = (
         f"https://www.facebook.com/v19.0/dialog/oauth"
         f"?client_id={app_id}"
