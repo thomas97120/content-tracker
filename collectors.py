@@ -239,6 +239,9 @@ def get_tiktok_stats(token_json: str, days=None):
         }
     ).json()
 
+    print(f"TikTok user: followers={followers}, name={disp_name}")
+    print(f"TikTok video_resp: {video_resp}")
+
     cutoff  = datetime.date.today() - datetime.timedelta(days=_days)
     results = []
 
