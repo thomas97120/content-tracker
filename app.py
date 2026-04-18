@@ -715,12 +715,15 @@ def get_stats(creator):
     )
 
     days = int(request.args.get("days", 7))
+    compare = request.args.get("compare", "1") != "0"  # comparaison activée par défaut
 
     # Cache
-    cache_key = f"{creator}_{days}"
+    cache_key = f"{creator}_{days}_{'c' if compare else 'n'}"
     cached = _stats_cache.get(cache_key)
     if cached and (time.time() - cached[0]) < CACHE_TTL:
         return jsonify(cached[1])
+
+    fetch_days = days * 2 if compare else days
 
     c_apis       = get_creator_apis(creator)
     google_token = c_apis.get("google_token")
@@ -737,7 +740,7 @@ def get_stats(creator):
     # YouTube
     if google_token:
         try:
-            rows = get_youtube_stats_oauth_creator(google_token, days=days)
+            rows = get_youtube_stats_oauth_creator(google_token, days=fetch_days)
             live += rows
             if not rows:
                 errors.append("YouTube OAuth : 0 résultats (chaîne vide ou API non activée)")
@@ -745,7 +748,7 @@ def get_stats(creator):
             errors.append(f"YouTube OAuth : {e}")
     elif yt_key and yt_cid:
         try:
-            rows = get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid, days=days)
+            rows = get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid, days=fetch_days)
             live += rows
             if not rows:
                 errors.append("YouTube API Key : 0 résultats")
@@ -772,26 +775,39 @@ def get_stats(creator):
     # TikTok
     if tiktok_token:
         try:
-            tt = get_tiktok_stats(tiktok_token, days=days)
+            tt = get_tiktok_stats(tiktok_token, days=fetch_days)
             live += tt
             if not tt:
                 errors.append("TikTok : 0 résultats")
         except Exception as e:
             errors.append(f"TikTok : {e}")
 
-    # Regroupe par plateforme
+    # Regroupe par plateforme + split période courante / précédente
     if live:
+        import datetime as _dt
+        cutoff_cur  = str(_dt.date.today() - _dt.timedelta(days=days))
+        cutoff_prev = str(_dt.date.today() - _dt.timedelta(days=days * 2))
+
         by_platform = {}
+        prev_platform = {}
         account_info = {}
+
         for row in live:
-            p = row.get("plateforme", "Autre")
-            by_platform.setdefault(p, []).append(row)
+            p    = row.get("plateforme", "Autre")
+            date = row.get("date", "")
             if row.get("_channel_name") and p not in account_info:
                 account_info[p] = {
                     "name": row["_channel_name"],
                     "id":   row.get("_channel_id", ""),
                 }
-        resp = {"creator": creator, "stats": by_platform, "source": "live",
+            if date >= cutoff_cur:
+                by_platform.setdefault(p, []).append(row)
+            elif compare and date >= cutoff_prev:
+                prev_platform.setdefault(p, []).append(row)
+
+        resp = {"creator": creator, "stats": by_platform,
+                "prev_stats": prev_platform if compare else {},
+                "source": "live",
                 "warnings": errors, "accounts": account_info, "days": days}
         _stats_cache[cache_key] = (time.time(), resp)
         return jsonify(resp)

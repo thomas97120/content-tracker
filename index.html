@@ -1252,6 +1252,7 @@
     let currentUser = null;     // infos utilisateur (email + creator_name)
     let currentPlatform = null; // plateforme sélectionnée (Instagram, TikTok…)
     let allStats    = {};       // toutes les stats récupérées depuis l'API
+    let prevStats   = {};       // stats période précédente (pour delta)
     let allAccounts = {};       // nom du compte par plateforme {YouTube: {name, id}}
     let currentDays  = 7;
     let currentSort  = 'date';
@@ -1517,6 +1518,7 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error);
         allStats     = data.stats || {};
+        prevStats    = data.prev_stats || {};
         allAccounts  = data.accounts || {};
 
         // Affiche les erreurs/warnings de fetch live
@@ -1588,13 +1590,11 @@
     // RENDER DASHBOARD
     // ══════════════════════════════════════════════
 
-    // 🔢 Stats globales
-    function renderSummary() {
+    function calcKpis(statsObj) {
       let totalViews = 0, totalPosts = 0, totalLikes = 0, totalComments = 0;
       let engSum = 0, engCount = 0, totalFollowers = 0;
       let bestPost = null;
-
-      for (const posts of Object.values(allStats)) {
+      for (const posts of Object.values(statsObj)) {
         for (const p of posts) {
           totalViews    += p.vues  || 0;
           totalLikes    += p.likes || 0;
@@ -1606,17 +1606,43 @@
         }
         if (posts.length) totalFollowers += posts[posts.length - 1].abonnes || 0;
       }
+      return { totalViews, totalPosts, totalLikes, totalComments,
+               avgEng: engCount ? engSum / engCount : 0,
+               avgViews: totalPosts ? totalViews / totalPosts : 0,
+               totalFollowers, bestPost };
+    }
 
-      const avgEng   = engCount   ? engSum / engCount     : 0;
-      const avgViews = totalPosts ? totalViews / totalPosts : 0;
+    function deltaHTML(cur, prev) {
+      if (!prev || prev === 0) return '';
+      const pct = ((cur - prev) / prev * 100);
+      if (Math.abs(pct) < 1) return '<span class="kpi-delta flat">~</span>';
+      const cls = pct > 0 ? 'up' : 'down';
+      const sign = pct > 0 ? '+' : '';
+      return `<span class="kpi-delta ${cls}">${sign}${pct.toFixed(0)}%</span>`;
+    }
 
-      document.getElementById('kpi-views').textContent     = totalViews ? fmt(totalViews) : '—';
-      document.getElementById('kpi-eng').textContent       = engCount   ? avgEng.toFixed(1) + '%' : '—';
-      document.getElementById('kpi-followers').textContent = totalFollowers ? fmt(totalFollowers) : '—';
-      document.getElementById('kpi-posts').textContent     = totalPosts || '—';
-      document.getElementById('kpi-avg-views').textContent = avgViews   ? fmt(Math.round(avgViews)) : '—';
-      document.getElementById('kpi-likes').textContent     = totalLikes ? fmt(totalLikes) : '—';
-      document.getElementById('kpi-comments-sub').textContent = totalComments ? fmt(totalComments) + ' commentaires' : '0 commentaires';
+    function setKpi(id, val, formatted, prevVal) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = formatted + (prevVal !== undefined ? ' ' + deltaHTML(val, prevVal) : '');
+    }
+
+    // 🔢 Stats globales
+    function renderSummary() {
+      const cur  = calcKpis(allStats);
+      const prev = calcKpis(prevStats);
+
+      const { totalViews, totalPosts, totalLikes, totalComments,
+              avgEng, avgViews, totalFollowers, bestPost } = cur;
+
+      setKpi('kpi-views',     totalViews,  totalViews ? fmt(totalViews) : '—',       prev.totalViews);
+      setKpi('kpi-eng',       avgEng,      avgEng ? avgEng.toFixed(1)+'%' : '—',     prev.avgEng);
+      setKpi('kpi-followers', totalFollowers, totalFollowers ? fmt(totalFollowers) : '—', undefined);
+      setKpi('kpi-posts',     totalPosts,  totalPosts || '—',                         prev.totalPosts);
+      setKpi('kpi-avg-views', avgViews,    avgViews ? fmt(Math.round(avgViews)) : '—', prev.avgViews);
+      setKpi('kpi-likes',     totalLikes,  totalLikes ? fmt(totalLikes) : '—',        prev.totalLikes);
+      document.getElementById('kpi-comments-sub').textContent =
+        totalComments ? fmt(totalComments) + ' commentaires' : '0 commentaires';
 
       // Meilleure vidéo
       const card = document.getElementById('best-video-card');
