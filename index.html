@@ -580,6 +580,31 @@
 .kpi-value.amber  { color:var(--amber); }
 .kpi-value.red    { color:var(--red); }
 
+/* KPI delta badge */
+.kpi-delta { font-size:10px; font-weight:600; padding:1px 6px; border-radius:20px; }
+.kpi-delta.up   { background:rgba(61,220,132,.15); color:var(--green); }
+.kpi-delta.down { background:rgba(255,85,85,.15);  color:var(--red); }
+.kpi-delta.flat { background:var(--surface); color:var(--muted); }
+
+/* Loading skeleton */
+@keyframes shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+.skeleton {
+  background: linear-gradient(90deg, var(--card) 25%, var(--surface) 50%, var(--card) 75%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px; display:inline-block;
+}
+.skeleton-kpi { height:22px; width:70%; margin:4px 0; }
+.skeleton-row { height:56px; border-radius:var(--r); margin-bottom:8px; width:100%; }
+
+/* Export button */
+.export-btn {
+  font-size:11px; padding:4px 10px; border-radius:8px;
+  border:1px solid var(--border); background:var(--surface); color:var(--muted);
+  cursor:pointer; font-family:'DM Sans',sans-serif;
+}
+.export-btn:hover { border-color:var(--accent); color:var(--text); }
+
 /* Post row — more info */
 .post-stats { display:flex; gap:10px; margin-top:4px; flex-wrap:wrap; }
 .post-stat  { font-size:11px; color:var(--muted); }
@@ -746,6 +771,7 @@
         <button class="sort-btn"        data-sort="eng"   onclick="setSort('eng')">💬 Eng.</button>
         <button class="sort-btn"        data-sort="likes" onclick="setSort('likes')">❤️ Likes</button>
         <button class="sort-btn" id="sort-dir-btn" onclick="toggleSortDir()">↓</button>
+        <button class="export-btn" onclick="exportCSV()" style="margin-left:auto">⬇ CSV</button>
       </div>
 
       <div class="post-list" id="post-list">
@@ -1245,6 +1271,32 @@
       return String(n);
     }
 
+    function showStatsSkeleton() {
+      ['kpi-views','kpi-eng','kpi-followers','kpi-posts','kpi-avg-views','kpi-likes'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<span class="skeleton skeleton-kpi"></span>';
+      });
+      const pl = document.getElementById('post-list');
+      if (pl) pl.innerHTML = [1,2,3].map(() =>
+        '<div class="skeleton skeleton-row"></div>').join('');
+    }
+
+    function exportCSV() {
+      const posts = currentPosts;
+      if (!posts.length) return;
+      const headers = ['Date','Titre','Format','Plateforme','Vues','Likes','Commentaires','Partages','Sauvegardes','Engagement%'];
+      const rows = posts.map(p => {
+        const eng = p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100).toFixed(2) : '0';
+        return [p.date, `"${(p.titre||'').replace(/"/g,'""')}"`, p.format, p.plateforme,
+                p.vues, p.likes, p.commentaires, p.partages, p.sauvegardes, eng].join(',');
+      });
+      const csv = [headers.join(','), ...rows].join('\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+      a.download = `stats_${viewedCreator}_${currentDays}j_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+    }
+
     // Ajoute emoji plateforme
     function platformEmoji(p) {
       return {
@@ -1454,6 +1506,9 @@
 
       document.getElementById('stats-greeting').textContent =
         currentRole === 'admin' ? viewedCreator : 'Tes stats';
+
+      // Skeleton loading
+      showStatsSkeleton();
 
       try {
         const resp = await fetch(`${API}/api/stats/${encodeURIComponent(viewedCreator)}?days=${currentDays}`, {
