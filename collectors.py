@@ -237,15 +237,12 @@ def get_tiktok_stats(token_json: str, days=None):
     except Exception as e:
         print(f"TikTok user/info ignoré: {e}")
 
-    # 2. Liste vidéos
+    # 2. Liste vidéos (fields = query param, max_count = body)
     _vr = requests.post(
         "https://open.tiktokapis.com/v2/video/list/",
         headers=headers,
-        json={
-            "fields":    ["id", "title", "create_time",
-                          "like_count", "comment_count", "share_count", "view_count"],
-            "max_count": min(_days * 3, 20),
-        }
+        params={"fields": "id,title,create_time,like_count,comment_count,share_count,view_count"},
+        json={"max_count": min(_days * 3, 20)},
     )
     print(f"TikTok video/list status={_vr.status_code} body={_vr.text[:300]}")
     try:
