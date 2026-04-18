@@ -24,14 +24,15 @@ def get_youtube_stats(creds):
     youtube           = build("youtube", "v3", credentials=creds)
     youtube_analytics = build("youtubeAnalytics", "v2", credentials=creds)
 
-    channel_resp = youtube.channels().list(part="id,statistics", mine=True).execute()
+    channel_resp = youtube.channels().list(part="id,statistics,snippet", mine=True).execute()
     items = channel_resp.get("items", [])
     if not items:
         raise ValueError("Aucune chaîne YouTube trouvée pour ce compte Google")
 
-    channel     = items[0]
-    channel_id  = channel["id"]
-    subscribers = int(channel["statistics"].get("subscriberCount", 0))
+    channel      = items[0]
+    channel_id   = channel["id"]
+    channel_name = channel.get("snippet", {}).get("title", "")
+    subscribers  = int(channel["statistics"].get("subscriberCount", 0))
 
     end_date   = datetime.date.today()
     start_date = end_date - datetime.timedelta(days=DAYS_TO_FETCH)
@@ -59,6 +60,8 @@ def get_youtube_stats(creds):
             "commentaires": int(comments),
             "partages":     int(shares),
             "sauvegardes":  0,
+            "_channel_name": channel_name,
+            "_channel_id":   channel_id,
         })
 
     return results

@@ -661,10 +661,17 @@ def get_stats(creator):
     # Regroupe par plateforme
     if live:
         by_platform = {}
+        account_info = {}
         for row in live:
             p = row.get("plateforme", "Autre")
             by_platform.setdefault(p, []).append(row)
-        return jsonify({"creator": creator, "stats": by_platform, "source": "live", "warnings": errors})
+            if row.get("_channel_name") and p not in account_info:
+                account_info[p] = {
+                    "name": row["_channel_name"],
+                    "id":   row.get("_channel_id", ""),
+                }
+        return jsonify({"creator": creator, "stats": by_platform, "source": "live",
+                        "warnings": errors, "accounts": account_info})
 
     # Fallback : Sheets
     stats = get_creator_stats(creator)

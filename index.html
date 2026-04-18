@@ -622,6 +622,7 @@
     <div class="card">
       <div class="card-title">Par plateforme</div>
       <div class="platform-row" id="platform-pills"></div>
+      <div id="account-badge" style="display:none;font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:3px 10px;margin-bottom:10px"></div>
       <div class="post-list" id="post-list">
         <div class="spinner"></div>
       </div>
@@ -1070,7 +1071,8 @@
     let currentRole = null;     // "admin" ou "creator"
     let currentUser = null;     // infos utilisateur (email + creator_name)
     let currentPlatform = null; // plateforme sélectionnée (Instagram, TikTok…)
-    let allStats = {};          // toutes les stats récupérées depuis l'API
+    let allStats    = {};       // toutes les stats récupérées depuis l'API
+    let allAccounts = {};       // nom du compte par plateforme {YouTube: {name, id}}
 
 
     // ══════════════════════════════════════════════
@@ -1301,7 +1303,8 @@
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error);
-        allStats = data.stats || {};
+        allStats     = data.stats || {};
+        allAccounts  = data.accounts || {};
 
         // Affiche les erreurs/warnings de fetch live
         const msgs = [...(data.errors || []), ...(data.warnings || [])];
@@ -1396,12 +1399,26 @@
           container.querySelectorAll('.platform-pill').forEach(el => el.classList.remove('active'));
           pill.classList.add('active');
           currentPlatform = p;
+          renderAccountBadge();
           renderPosts();
         };
         container.appendChild(pill);
       });
 
       currentPlatform = platforms[0];
+      renderAccountBadge();
+    }
+
+    function renderAccountBadge() {
+      const el = document.getElementById('account-badge');
+      if (!el) return;
+      const acc = allAccounts[currentPlatform];
+      if (acc && acc.name) {
+        el.textContent = '📺 ' + acc.name;
+        el.style.display = 'inline-block';
+      } else {
+        el.style.display = 'none';
+      }
     }
 
 
