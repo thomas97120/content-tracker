@@ -218,10 +218,10 @@ def get_tiktok_stats(token_json: str, days=None):
     }
 
     # 1. Infos utilisateur
-    _ur = requests.post(
+    _ur = requests.get(
         "https://open.tiktokapis.com/v2/user/info/",
         headers=headers,
-        json={"fields": ["display_name", "follower_count", "username"]}
+        params={"fields": "open_id,display_name,username,follower_count"}
     )
     print(f"TikTok user/info status={_ur.status_code} body={_ur.text[:300]}")
     try:
