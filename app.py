@@ -17,6 +17,7 @@ from sheets import (
     get_creator_stats, add_manual_stats,
     get_dashboard_data, save_content_decision
 )
+# get_all_creators est défini localement (lit users.json)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-render")
@@ -438,6 +439,26 @@ def swipe_idea():
 def list_creators():
     creators = get_all_creators()
     return jsonify({"creators": creators})
+
+
+@app.route("/api/admin/export", methods=["GET"])
+@admin_required
+def export_state():
+    """
+    Retourne le JSON à coller dans les env vars Render pour persister les données.
+    USERS_JSON       → users.json
+    CREATOR_APIS_JSON → creator_apis.json
+    """
+    from creator_apis import export_all as export_apis
+    return jsonify({
+        "USERS_JSON":        load_users(),
+        "CREATOR_APIS_JSON": export_apis(),
+        "instructions": (
+            "Copie chaque valeur dans Render → Environment → ajoute/modifie "
+            "les variables USERS_JSON et CREATOR_APIS_JSON. "
+            "Redéploie ensuite pour que le bootstrap s'applique."
+        )
+    })
 
 
 @app.route("/api/admin/dashboard", methods=["GET"])

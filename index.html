@@ -546,9 +546,18 @@
 
   <!-- ── PAGE : STATS ── -->
   <div class="page active" id="page-stats">
-    <div>
-      <div class="section-title" id="stats-greeting">Tes stats</div>
-      <div class="section-sub">7 derniers jours</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div>
+        <div class="section-title" id="stats-greeting">Tes stats</div>
+        <div class="section-sub">7 derniers jours</div>
+      </div>
+      <!-- Sélecteur créateur (admin only) -->
+      <select id="admin-creator-select" class="hidden"
+              style="background:var(--card);border:1px solid var(--border);
+                     border-radius:var(--r-sm);color:var(--text);padding:8px 12px;
+                     font-family:inherit;font-size:13px;max-width:140px"
+              onchange="onAdminCreatorChange(this.value)">
+      </select>
     </div>
 
     <div class="stat-grid">
@@ -1100,44 +1109,68 @@
     // STATS
     // ══════════════════════════════════════════════
 
-    async function loadStats() {
-      try {
+    // Créateur actuellement affiché dans Stats (admin peut changer)
+    let viewedCreator = null;
 
-        // 🔥 Choix du bon créateur
-        let creatorName = 'maina';
-
-        if (currentRole === 'admin') {
-          creatorName = 'maina';
-        } else if (currentUser?.creator_name) {
-          creatorName = currentUser.creator_name;
+    async function loadStats(creatorOverride) {
+      // Détermine quel créateur afficher
+      if (creatorOverride) {
+        viewedCreator = creatorOverride;
+      } else if (currentRole === 'admin') {
+        // Admin : prend le premier de la liste si pas encore choisi
+        if (!viewedCreator) {
+          const creators = await fetchCreatorList();
+          viewedCreator = creators[0] || null;
+          populateCreatorSelect(creators);
         }
+      } else {
+        viewedCreator = currentUser?.creator_name || null;
+      }
 
-        const resp = await fetch(`${API}/api/stats/${creatorName}`, {
+      if (!viewedCreator) {
+        allStats = {};
+        renderSummary(); renderPlatformPills(); renderPosts();
+        return;
+      }
+
+      document.getElementById('stats-greeting').textContent =
+        currentRole === 'admin' ? viewedCreator : 'Tes stats';
+
+      try {
+        const resp = await fetch(`${API}/api/stats/${encodeURIComponent(viewedCreator)}`, {
           credentials: 'include'
         });
-
         const data = await resp.json();
-
-        if (!resp.ok) {
-          throw new Error(data.error);
-        }
-
+        if (!resp.ok) throw new Error(data.error);
         allStats = data.stats || {};
-
-        renderSummary();
-        renderPlatformPills();
-        renderPosts();
-
       } catch (e) {
         console.error(e);
-
-        // ⚠️ si erreur → pas de fake data
         allStats = {};
-
-        renderSummary();
-        renderPlatformPills();
-        renderPosts();
       }
+
+      renderSummary();
+      renderPlatformPills();
+      renderPosts();
+    }
+
+    async function fetchCreatorList() {
+      try {
+        const r = await fetch(`${API}/api/admin/creators`, { credentials: 'include' });
+        const d = await r.json();
+        return d.creators || [];
+      } catch { return []; }
+    }
+
+    function populateCreatorSelect(creators) {
+      const sel = document.getElementById('admin-creator-select');
+      sel.classList.remove('hidden');
+      sel.innerHTML = creators.map(c =>
+        `<option value="${c}" ${c === viewedCreator ? 'selected' : ''}>${c}</option>`
+      ).join('');
+    }
+
+    function onAdminCreatorChange(creator) {
+      loadStats(creator);
     }
 
 
