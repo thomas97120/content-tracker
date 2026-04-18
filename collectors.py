@@ -301,12 +301,13 @@ def get_tiktok_stats(token_json: str, days=None):
 #  INSTAGRAM
 # ─────────────────────────────────────────────
 
-def get_instagram_stats(token=None, business_id=None):
+def get_instagram_stats(token=None, business_id=None, days=None):
     token       = token       or META_ACCESS_TOKEN
     business_id = business_id or INSTAGRAM_BUSINESS_ID
     if not token or not business_id:
         print("Instagram : META_ACCESS_TOKEN ou INSTAGRAM_BUSINESS_ID manquant")
         return []
+    _days = days or DAYS_TO_FETCH
     try:
         BASE   = "https://graph.facebook.com/v19.0"
         params = {"access_token": token}
@@ -317,41 +318,53 @@ def get_instagram_stats(token=None, business_id=None):
         ).json()
         followers = account_resp.get("followers_count", 0)
 
-        media_resp = requests.get(
-            f"{BASE}/{business_id}/media",
-            params={**params, "fields": "id,caption,media_type,timestamp", "limit": DAYS_TO_FETCH * 3}
-        ).json()
-
         results = []
-        cutoff  = datetime.datetime.now() - datetime.timedelta(days=DAYS_TO_FETCH)
+        cutoff  = datetime.datetime.now() - datetime.timedelta(days=_days)
 
-        for media in media_resp.get("data", []):
-            post_date = datetime.datetime.fromisoformat(
-                media["timestamp"].replace("Z", "+00:00")).replace(tzinfo=None)
-            if post_date < cutoff:
-                continue
+        # Pagination sur /media
+        page_url = f"{BASE}/{business_id}/media"
+        page_params = {**params, "fields": "id,caption,media_type,timestamp", "limit": 100}
+        fetched_pages = 0
 
-            media_type = media.get("media_type", "IMAGE")
-            insights   = requests.get(
-                f"{BASE}/{media['id']}/insights",
-                params={**params, "metric": "impressions,reach,likes_count,comments_count,saved,shares"}
-            ).json()
-            stats = {item["name"]: item["values"][0]["value"]
-                     for item in insights.get("data", [])}
+        while page_url and fetched_pages < 10:          # max 10 pages = 1000 médias
+            media_resp = requests.get(page_url, params=page_params if fetched_pages == 0 else {}).json()
+            fetched_pages += 1
+            stop_pagination = False
 
-            results.append({
-                "plateforme":   "Instagram",
-                "date":         post_date.strftime("%Y-%m-%d"),
-                "titre":        (media.get("caption", "")[:40] + "…") if media.get("caption") else media_type,
-                "format":       media_type,
-                "vues":         stats.get("impressions", 0),
-                "reach":        stats.get("reach", 0),
-                "abonnes":      followers,
-                "likes":        stats.get("likes_count", 0),
-                "commentaires": stats.get("comments_count", 0),
-                "partages":     stats.get("shares", 0),
-                "sauvegardes":  stats.get("saved", 0),
-            })
+            for media in media_resp.get("data", []):
+                post_date = datetime.datetime.fromisoformat(
+                    media["timestamp"].replace("Z", "+00:00")).replace(tzinfo=None)
+                if post_date < cutoff:
+                    stop_pagination = True
+                    break
+
+                media_type = media.get("media_type", "IMAGE")
+                insights   = requests.get(
+                    f"{BASE}/{media['id']}/insights",
+                    params={**params, "metric": "impressions,reach,likes_count,comments_count,saved,shares"}
+                ).json()
+                stats = {item["name"]: item["values"][0]["value"]
+                         for item in insights.get("data", [])}
+
+                results.append({
+                    "plateforme":   "Instagram",
+                    "date":         post_date.strftime("%Y-%m-%d"),
+                    "titre":        (media.get("caption", "")[:50] + "…") if media.get("caption") else media_type,
+                    "format":       media_type,
+                    "vues":         stats.get("impressions", 0),
+                    "reach":        stats.get("reach", 0),
+                    "abonnes":      followers,
+                    "likes":        stats.get("likes_count", 0),
+                    "commentaires": stats.get("comments_count", 0),
+                    "partages":     stats.get("shares", 0),
+                    "sauvegardes":  stats.get("saved", 0),
+                })
+
+            if stop_pagination:
+                break
+            next_url = media_resp.get("paging", {}).get("next")
+            page_url = next_url  # None si plus de pages
+            page_params = {}     # next URL contient déjà tous les params
 
         return results
 
@@ -364,12 +377,13 @@ def get_instagram_stats(token=None, business_id=None):
 #  FACEBOOK
 # ─────────────────────────────────────────────
 
-def get_facebook_stats(token=None, page_id=None):
+def get_facebook_stats(token=None, page_id=None, days=None):
     token   = token   or META_ACCESS_TOKEN
     page_id = page_id or FACEBOOK_PAGE_ID
     if not token or not page_id:
         print("Facebook : META_ACCESS_TOKEN ou FACEBOOK_PAGE_ID manquant")
         return []
+    _days = days or DAYS_TO_FETCH
     try:
         BASE   = "https://graph.facebook.com/v19.0"
         params = {"access_token": token}
@@ -380,46 +394,58 @@ def get_facebook_stats(token=None, page_id=None):
         ).json()
         fans = page_resp.get("fan_count", 0)
 
-        posts_resp = requests.get(
-            f"{BASE}/{page_id}/posts",
-            params={**params, "fields": "id,message,created_time", "limit": DAYS_TO_FETCH * 3}
-        ).json()
-
         results = []
-        cutoff  = datetime.datetime.now() - datetime.timedelta(days=DAYS_TO_FETCH)
+        cutoff  = datetime.datetime.now() - datetime.timedelta(days=_days)
 
-        for post in posts_resp.get("data", []):
-            post_date = datetime.datetime.fromisoformat(
-                post["created_time"].replace("+0000", "+00:00")).replace(tzinfo=None)
-            if post_date < cutoff:
-                continue
+        # Pagination sur /posts
+        page_url    = f"{BASE}/{page_id}/posts"
+        page_params = {**params, "fields": "id,message,created_time", "limit": 100}
+        fetched_pages = 0
 
-            post_id  = post["id"]
-            insights = requests.get(
-                f"{BASE}/{post_id}/insights",
-                params={**params, "metric": "post_impressions,post_reach"}
-            ).json()
-            stats    = {item["name"]: item["values"][0]["value"]
-                        for item in insights.get("data", [])}
+        while page_url and fetched_pages < 10:
+            posts_resp = requests.get(page_url, params=page_params if fetched_pages == 0 else {}).json()
+            fetched_pages += 1
+            stop_pagination = False
 
-            eng_resp = requests.get(
-                f"{BASE}/{post_id}",
-                params={**params, "fields": "reactions.summary(true),comments.summary(true),shares"}
-            ).json()
+            for post in posts_resp.get("data", []):
+                post_date = datetime.datetime.fromisoformat(
+                    post["created_time"].replace("+0000", "+00:00")).replace(tzinfo=None)
+                if post_date < cutoff:
+                    stop_pagination = True
+                    break
 
-            results.append({
-                "plateforme":   "Facebook",
-                "date":         post_date.strftime("%Y-%m-%d"),
-                "titre":        (post.get("message", "")[:40] + "…") if post.get("message") else "Post",
-                "format":       "Post",
-                "vues":         stats.get("post_impressions", 0),
-                "reach":        stats.get("post_reach", 0),
-                "abonnes":      fans,
-                "likes":        eng_resp.get("reactions", {}).get("summary", {}).get("total_count", 0),
-                "commentaires": eng_resp.get("comments",  {}).get("summary", {}).get("total_count", 0),
-                "partages":     eng_resp.get("shares",    {}).get("count", 0),
-                "sauvegardes":  0,
-            })
+                post_id  = post["id"]
+                insights = requests.get(
+                    f"{BASE}/{post_id}/insights",
+                    params={**params, "metric": "post_impressions,post_reach"}
+                ).json()
+                stats    = {item["name"]: item["values"][0]["value"]
+                            for item in insights.get("data", [])}
+
+                eng_resp = requests.get(
+                    f"{BASE}/{post_id}",
+                    params={**params, "fields": "reactions.summary(true),comments.summary(true),shares"}
+                ).json()
+
+                results.append({
+                    "plateforme":   "Facebook",
+                    "date":         post_date.strftime("%Y-%m-%d"),
+                    "titre":        (post.get("message", "")[:50] + "…") if post.get("message") else "Post",
+                    "format":       "Post",
+                    "vues":         stats.get("post_impressions", 0),
+                    "reach":        stats.get("post_reach", 0),
+                    "abonnes":      fans,
+                    "likes":        eng_resp.get("reactions", {}).get("summary", {}).get("total_count", 0),
+                    "commentaires": eng_resp.get("comments",  {}).get("summary", {}).get("total_count", 0),
+                    "partages":     eng_resp.get("shares",    {}).get("count", 0),
+                    "sauvegardes":  0,
+                })
+
+            if stop_pagination:
+                break
+            next_url    = posts_resp.get("paging", {}).get("next")
+            page_url    = next_url
+            page_params = {}
 
         return results
 

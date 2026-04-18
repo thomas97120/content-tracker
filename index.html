@@ -983,6 +983,55 @@
     </div>
   </div>
 
+  <!-- ── PAGE : HISTORIQUE ── -->
+  <div class="page" id="page-history">
+    <div>
+      <div class="section-title">📚 Historique</div>
+      <div class="section-sub">Données jusqu'à 1 an · analyse approfondie</div>
+    </div>
+
+    <div class="card" id="history-sync-card">
+      <div class="card-title">🔄 Synchronisation historique</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+        Télécharge toutes les données disponibles (&lt; 1 an) depuis tes APIs connectées et les stocke localement pour une analyse précise.
+        <br><br>
+        <strong style="color:var(--text)">Instagram / Facebook</strong> : pagination complète (jusqu'à 1000 posts)<br>
+        <strong style="color:var(--text)">YouTube</strong> : jusqu'à 50 vidéos récentes<br>
+        <strong style="color:var(--text)">TikTok</strong> : 20 dernières vidéos (limite API)
+      </div>
+      <button class="btn btn-primary" id="sync-history-btn" onclick="syncHistory()">
+        ⬇ Télécharger tout l'historique
+      </button>
+      <div class="success-msg" id="sync-history-ok" style="margin-top:10px"></div>
+      <div class="login-error"  id="sync-history-err" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Résumé de la base locale -->
+    <div class="card" id="history-summary-card" style="display:none">
+      <div class="card-title">📊 Données stockées</div>
+      <div id="history-summary-content"></div>
+    </div>
+
+    <!-- Graphique long terme (vues par mois) -->
+    <div class="card" id="history-trend-card" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">📈 Évolution sur 12 mois</div>
+        <div style="display:flex;gap:6px">
+          <button class="sort-btn active" id="htrend-views" onclick="setHistoryMetric('views')">Vues</button>
+          <button class="sort-btn"        id="htrend-eng"   onclick="setHistoryMetric('eng')">Eng.%</button>
+          <button class="sort-btn"        id="htrend-posts" onclick="setHistoryMetric('posts')">Posts</button>
+        </div>
+      </div>
+      <canvas id="history-trend-chart" height="200"></canvas>
+    </div>
+
+    <!-- Top posts historiques -->
+    <div class="card" id="history-top-card" style="display:none">
+      <div class="card-title">🏆 Top 10 posts (tous temps)</div>
+      <div id="history-top-content"></div>
+    </div>
+  </div>
+
   <!-- ── PAGE : SWIPE ── -->
   <div class="page" id="page-swipe">
     <div>
@@ -1290,9 +1339,12 @@
   </div>
 
   <!-- Bottom nav (creator) -->
-  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(4, 1fr)">
+  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(5, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this)">
       <span class="icon">📊</span>Stats
+    </button>
+    <button class="nav-btn" onclick="showPage('history', this); loadHistory()">
+      <span class="icon">📚</span>Historique
     </button>
     <button class="nav-btn" onclick="showPage('swipe', this)">
       <span class="icon">🎯</span>Décisions
@@ -1306,9 +1358,12 @@
   </nav>
 
   <!-- Bottom nav (admin) -->
-  <nav class="bottom-nav hidden" id="nav-admin" style="grid-template-columns: repeat(5, 1fr)">
+  <nav class="bottom-nav hidden" id="nav-admin" style="grid-template-columns: repeat(6, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this, 'admin')">
       <span class="icon">📊</span>Stats
+    </button>
+    <button class="nav-btn" onclick="showPage('history', this, 'admin'); loadHistory()">
+      <span class="icon">📚</span>Historique
     </button>
     <button class="nav-btn" onclick="showPage('admin', this, 'admin')">
       <span class="icon">👑</span>Admin
@@ -2925,6 +2980,196 @@
           }
         }
       });
+    }
+
+
+    // ══════════════════════════════════════════════
+    // HISTORIQUE — Sync + Affichage
+    // ══════════════════════════════════════════════
+
+    let _historyChart  = null;
+    let _historyMetric = 'views';
+    let _historyData   = null;  // { history, summary, monthly }
+
+    async function syncHistory() {
+      const btn  = document.getElementById('sync-history-btn');
+      const okEl = document.getElementById('sync-history-ok');
+      const errEl= document.getElementById('sync-history-err');
+      okEl.style.display = errEl.style.display = 'none';
+
+      btn.disabled    = true;
+      btn.textContent = '⏳ Téléchargement en cours… (peut prendre 1-2 min)';
+
+      try {
+        const resp = await fetch(
+          `${API}/api/stats/${encodeURIComponent(viewedCreator)}/sync-history`,
+          { method: 'POST', credentials: 'include' }
+        );
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error);
+
+        const s = data.summary;
+        okEl.innerHTML = `✓ ${data.fetched} posts récupérés, ${data.stored} stockés.<br>
+          Période : ${s.oldest || '—'} → ${s.newest || '—'}`;
+        okEl.style.display = 'block';
+        if (data.errors?.length) {
+          errEl.textContent   = '⚠️ ' + data.errors.join(' | ');
+          errEl.style.display = 'block';
+        }
+        toast(`${data.stored} posts stockés ✓`, 'success');
+        loadHistory();
+      } catch (e) {
+        errEl.textContent   = 'Erreur : ' + e.message;
+        errEl.style.display = 'block';
+        toast('Sync échoué', 'error');
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = '⬇ Télécharger tout l\'historique';
+      }
+    }
+
+    async function loadHistory() {
+      if (!viewedCreator) return;
+      try {
+        const resp = await fetch(
+          `${API}/api/stats/${encodeURIComponent(viewedCreator)}/history?days=365`,
+          { credentials: 'include' }
+        );
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error);
+        _historyData = data;
+        renderHistorySummary(data);
+        renderHistoryTrend(data);
+        renderHistoryTop(data);
+      } catch (e) {
+        console.error('History load error:', e);
+      }
+    }
+
+    function renderHistorySummary(data) {
+      const s    = data.summary;
+      const card = document.getElementById('history-summary-card');
+      const cont = document.getElementById('history-summary-content');
+      if (!s || !s.total_posts) { card.style.display = 'none'; return; }
+
+      const platRows = Object.entries(s.by_platform || {}).map(([plat, p]) =>
+        `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px">${platformEmoji(plat)} ${plat}</span>
+          <span style="font-size:12px;color:var(--muted)">${p.posts} posts · ${fmt(p.total_views)} vues · ${p.avg_eng}% eng</span>
+        </div>`
+      ).join('');
+
+      cont.innerHTML = `
+        <div class="stat-grid" style="margin-bottom:12px">
+          <div class="stat-box">
+            <div class="stat-label">Posts stockés</div>
+            <div class="stat-value purple">${s.total_posts}</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Période</div>
+            <div class="stat-value" style="font-size:13px">${s.oldest?.slice(0,7) || '—'} → ${s.newest?.slice(0,7) || '—'}</div>
+          </div>
+        </div>
+        ${platRows}`;
+      card.style.display = '';
+    }
+
+    function setHistoryMetric(metric) {
+      _historyMetric = metric;
+      ['views','eng','posts'].forEach(k => {
+        const b = document.getElementById('htrend-' + k);
+        if (b) b.classList.toggle('active', k === metric);
+      });
+      if (_historyData) renderHistoryTrend(_historyData);
+    }
+
+    function renderHistoryTrend(data) {
+      const card = document.getElementById('history-trend-card');
+      if (!data.monthly?.length) { card.style.display = 'none'; return; }
+      card.style.display = '';
+
+      // Aggrège par mois (toutes plateformes)
+      const byMonth = {};
+      for (const r of data.monthly) {
+        if (!byMonth[r.month]) byMonth[r.month] = { views: 0, engSum: 0, engN: 0, posts: 0 };
+        byMonth[r.month].views  += r.total_views || 0;
+        byMonth[r.month].engSum += (r.avg_eng || 0) * (r.posts || 0);
+        byMonth[r.month].engN   += r.posts || 0;
+        byMonth[r.month].posts  += r.posts || 0;
+      }
+
+      const months = Object.keys(byMonth).sort();
+      const cfg = {
+        views: { label: 'Vues',   color: '#7c6aff', bg: 'rgba(124,106,255,0.12)',
+                 fn: m => byMonth[m].views },
+        eng:   { label: 'Eng.%',  color: '#6affd4', bg: 'rgba(106,255,212,0.12)',
+                 fn: m => byMonth[m].engN ? +(byMonth[m].engSum / byMonth[m].engN).toFixed(2) : 0 },
+        posts: { label: 'Posts',  color: '#ff6aad', bg: 'rgba(255,106,173,0.12)',
+                 fn: m => byMonth[m].posts },
+      }[_historyMetric];
+
+      const values = months.map(cfg.fn);
+      const labels = months.map(m => {
+        const [y, mo] = m.split('-');
+        return ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'][parseInt(mo)-1] + ' ' + y.slice(2);
+      });
+
+      const canvas = document.getElementById('history-trend-chart');
+      if (!canvas) return;
+      if (_historyChart) _historyChart.destroy();
+      _historyChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: cfg.label, data: values,
+            backgroundColor: cfg.bg, borderColor: cfg.color,
+            borderWidth: 1.5, borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: { label: ctx => _historyMetric === 'eng' ? ctx.parsed.y.toFixed(1)+'%' : fmt(ctx.parsed.y) + ' ' + cfg.label.toLowerCase() } }
+          },
+          scales: {
+            x: { ticks: { color: '#6b6b80', font: { size: 10 }, maxRotation: 45 }, grid: { display: false } },
+            y: { ticks: { color: '#6b6b80', font: { size: 11 },
+                          callback: v => _historyMetric === 'eng' ? v+'%' : v >= 1000 ? (v/1000).toFixed(1)+'K' : v },
+                 grid: { color: 'rgba(255,255,255,0.05)' } }
+          }
+        }
+      });
+    }
+
+    function renderHistoryTop(data) {
+      const card = document.getElementById('history-top-card');
+      const cont = document.getElementById('history-top-content');
+      const posts = data.history || [];
+      if (!posts.length) { card.style.display = 'none'; return; }
+
+      const top10 = [...posts].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10);
+      const maxV  = top10[0]?.views || 1;
+
+      cont.innerHTML = top10.map((p, i) => {
+        const pct = Math.round((p.views || 0) / maxV * 100);
+        const emoji = platformEmoji(p.platform);
+        return `
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <span style="font-size:12px;font-weight:500">${i+1}. ${emoji} ${p.title || p.post_date}</span>
+            <span style="font-size:11px;color:var(--muted)">${fmt(p.views)} vues</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:6px;background:var(--surface);border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${pct}%;background:var(--accent);border-radius:3px"></div>
+            </div>
+            <span style="font-size:10px;color:var(--muted);width:40px;text-align:right">${p.eng_pct}%</span>
+          </div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">${p.post_date} · ${p.platform} · ${p.format || '—'}</div>
+        </div>`;
+      }).join('');
+      card.style.display = '';
     }
 
 

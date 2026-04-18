@@ -27,6 +27,13 @@ from sheets import (
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:5000")
 
+# Bootstrap historique depuis env var (Render persistence)
+try:
+    from history_store import bootstrap_from_env
+    bootstrap_from_env()
+except Exception as _he:
+    print(f"[history] bootstrap skip: {_he}")
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-render")
 app.config.update(
@@ -1014,6 +1021,140 @@ def sync_all():
         }})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ──────────────────────────────────────────────────────────────
+# HISTORIQUE — sync + lecture
+# ──────────────────────────────────────────────────────────────
+
+HISTORY_DAYS = 365  # fenêtre max de collecte
+
+
+@app.route("/api/stats/<creator>/sync-history", methods=["POST"])
+@login_required
+def sync_history(creator):
+    """
+    Fetch jusqu'à 365 jours de données depuis toutes les APIs connectées,
+    upsert dans SQLite local. Long à s'exécuter (plusieurs minutes pour 1 an).
+    """
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+
+    from creator_apis import get_creator_apis
+    from collectors import (
+        get_youtube_stats_oauth_creator, get_youtube_stats_apikey,
+        get_instagram_stats, get_facebook_stats, get_tiktok_stats,
+    )
+    from history_store import upsert_posts, get_history_summary
+
+    c_apis = get_creator_apis(creator)
+    all_rows, errors = [], []
+
+    # YouTube OAuth
+    if c_apis.get("google_token"):
+        try:
+            rows = get_youtube_stats_oauth_creator(c_apis["google_token"], days=HISTORY_DAYS)
+            all_rows += rows
+        except Exception as e:
+            errors.append(f"YouTube OAuth : {e}")
+    elif c_apis.get("youtube_api_key") and c_apis.get("youtube_channel_id"):
+        try:
+            rows = get_youtube_stats_apikey(
+                api_key=c_apis["youtube_api_key"],
+                channel_id=c_apis["youtube_channel_id"],
+                days=HISTORY_DAYS,
+            )
+            all_rows += rows
+        except Exception as e:
+            errors.append(f"YouTube API Key : {e}")
+
+    # Instagram (avec pagination)
+    if c_apis.get("meta_access_token") and c_apis.get("instagram_business_id"):
+        try:
+            rows = get_instagram_stats(
+                token=c_apis["meta_access_token"],
+                business_id=c_apis["instagram_business_id"],
+                days=HISTORY_DAYS,
+            )
+            all_rows += rows
+        except Exception as e:
+            errors.append(f"Instagram : {e}")
+
+    # Facebook (avec pagination)
+    if c_apis.get("meta_access_token") and c_apis.get("facebook_page_id"):
+        try:
+            rows = get_facebook_stats(
+                token=c_apis["meta_access_token"],
+                page_id=c_apis["facebook_page_id"],
+                days=HISTORY_DAYS,
+            )
+            all_rows += rows
+        except Exception as e:
+            errors.append(f"Facebook : {e}")
+
+    # TikTok (limité à 20 vidéos par l'API)
+    if c_apis.get("tiktok_token"):
+        try:
+            rows = get_tiktok_stats(c_apis["tiktok_token"], days=HISTORY_DAYS)
+            all_rows += rows
+        except Exception as e:
+            errors.append(f"TikTok : {e}")
+
+    stored = upsert_posts(creator, all_rows)
+    summary = get_history_summary(creator)
+
+    return jsonify({
+        "success":  True,
+        "fetched":  len(all_rows),
+        "stored":   stored,
+        "errors":   errors,
+        "summary":  summary,
+    })
+
+
+@app.route("/api/stats/<creator>/history", methods=["GET"])
+@login_required
+def get_creator_history(creator):
+    """Retourne l'historique stocké (posts + résumé mensuel)."""
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+
+    from history_store import get_history, get_history_summary, get_monthly_breakdown
+
+    days    = int(request.args.get("days", 365))
+    rows    = get_history(creator, days=days)
+    summary = get_history_summary(creator)
+    monthly = get_monthly_breakdown(creator)
+
+    return jsonify({
+        "creator":  creator,
+        "history":  rows,
+        "summary":  summary,
+        "monthly":  monthly,
+        "days":     days,
+    })
+
+
+@app.route("/api/admin/export-history", methods=["GET"])
+@admin_required
+def export_history():
+    """
+    Exporte tout l'historique en JSON (à coller dans HISTORY_JSON sur Render).
+    Format : { "creator1": [...rows], "creator2": [...rows] }
+    """
+    from history_store import get_history, export_all_json
+    creators = get_all_creators()
+    result   = {}
+    for c in creators:
+        result[c] = get_history(c, days=400)
+
+    return jsonify({
+        "HISTORY_JSON": result,
+        "instructions": (
+            "Copie la valeur de HISTORY_JSON dans Render → Environment. "
+            "L'historique sera restauré automatiquement au prochain démarrage."
+        ),
+    })
 
 
 # ──────────────────────────────────────────────────────────────
