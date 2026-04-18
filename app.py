@@ -605,8 +605,45 @@ def delete_my_api(key):
 def get_stats(creator):
     if not can_access_creator(creator):
         return jsonify({"error": "Accès interdit"}), 403
+
+    from creator_apis import get_creator_apis
+    from collectors import (
+        get_youtube_stats_oauth_creator, get_youtube_stats_apikey,
+        get_instagram_stats, get_facebook_stats,
+    )
+
+    c_apis       = get_creator_apis(creator)
+    google_token = c_apis.get("google_token")
+    yt_key       = c_apis.get("youtube_api_key")
+    yt_cid       = c_apis.get("youtube_channel_id")
+    meta_token   = c_apis.get("meta_access_token")
+    ig_id        = c_apis.get("instagram_business_id")
+    fb_id        = c_apis.get("facebook_page_id")
+
+    live = []
+
+    # YouTube
+    if google_token:
+        live += get_youtube_stats_oauth_creator(google_token)
+    elif yt_key and yt_cid:
+        live += get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid)
+
+    # Instagram + Facebook
+    if meta_token:
+        live += get_instagram_stats(token=meta_token, business_id=ig_id)
+        live += get_facebook_stats(token=meta_token, page_id=fb_id)
+
+    # Regroupe par plateforme
+    if live:
+        by_platform = {}
+        for row in live:
+            p = row.get("plateforme", "Autre")
+            by_platform.setdefault(p, []).append(row)
+        return jsonify({"creator": creator, "stats": by_platform, "source": "live"})
+
+    # Fallback : Sheets
     stats = get_creator_stats(creator)
-    return jsonify({"creator": creator, "stats": stats})
+    return jsonify({"creator": creator, "stats": stats, "source": "sheets"})
 
 
 @app.route("/api/stats/manual", methods=["POST"])
