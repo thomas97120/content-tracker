@@ -156,7 +156,9 @@ def get_creator_stats(creator_name: str) -> dict:
         return result
 
     except Exception as e:
-        return {"error": str(e)}
+        print(f"get_creator_stats ERREUR : {e}")
+        # Retourne dict vide (Sheets pas configuré ou hors ligne)
+        return {p: [] for p in PLATFORM_SHEETS}
 
 
 def get_all_creators() -> list:
@@ -191,7 +193,8 @@ def get_dashboard_data() -> dict:
         return {"platforms": summary, "updated_at": datetime.datetime.now().isoformat()}
 
     except Exception as e:
-        return {"error": str(e)}
+        print(f"get_dashboard_data ERREUR : {e}")
+        return {"platforms": {}, "updated_at": datetime.datetime.now().isoformat()}
 
 
 # ─── Écriture des stats ───────────────────────────────────────
