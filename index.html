@@ -606,6 +606,33 @@
     </div>
 
     <div class="card">
+      <div class="card-title">📂 Import CSV</div>
+      <div class="form-stack">
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">
+          Télécharge ton export depuis le dashboard de chaque plateforme, puis importe-le ici.
+        </div>
+        <div class="form-group">
+          <div class="field-label">Plateforme</div>
+          <select id="csv-platform">
+            <option value="YouTube">▶️ YouTube</option>
+            <option value="Instagram">📸 Instagram</option>
+            <option value="Facebook">👍 Facebook</option>
+            <option value="TikTok">🎵 TikTok</option>
+            <option value="Snapchat">👻 Snapchat</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="field-label">Fichier CSV</div>
+          <input type="file" id="csv-file" accept=".csv,.txt"
+                 style="padding:10px 14px;cursor:pointer">
+        </div>
+        <button class="btn btn-primary" onclick="importCSV()">📤 Importer</button>
+        <div class="success-msg" id="csv-success"></div>
+        <div class="login-error" id="csv-error"></div>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="form-stack">
         <div class="form-group">
           <div class="field-label">Plateforme</div>
@@ -812,31 +839,56 @@
         </div>
 
         <div class="form-group">
-          <div class="field-label">Meta Access Token (Instagram + Facebook)</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="field-label">Meta Access Token (Instagram + Facebook)</div>
+            <button onclick="deleteApiKey('meta_access_token')"
+                    style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0"
+                    title="Supprimer">🗑️</button>
+          </div>
           <input type="password" id="api-meta-token" placeholder="Colle ton token Meta ici…" autocomplete="off">
           <div class="stat-sub" id="api-meta-token-current" style="margin-top:4px"></div>
         </div>
 
         <div class="form-group">
-          <div class="field-label">Instagram Business ID</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="field-label">Instagram Business ID</div>
+            <button onclick="deleteApiKey('instagram_business_id')"
+                    style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0"
+                    title="Supprimer">🗑️</button>
+          </div>
           <input type="text" id="api-ig-id" placeholder="Ex: 17841400000000000" autocomplete="off">
           <div class="stat-sub" id="api-ig-id-current" style="margin-top:4px"></div>
         </div>
 
         <div class="form-group">
-          <div class="field-label">Facebook Page ID</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="field-label">Facebook Page ID</div>
+            <button onclick="deleteApiKey('facebook_page_id')"
+                    style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0"
+                    title="Supprimer">🗑️</button>
+          </div>
           <input type="text" id="api-fb-id" placeholder="Ex: 105000000000000" autocomplete="off">
           <div class="stat-sub" id="api-fb-id-current" style="margin-top:4px"></div>
         </div>
 
         <div class="form-group">
-          <div class="field-label">YouTube API Key</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="field-label">YouTube API Key</div>
+            <button onclick="deleteApiKey('youtube_api_key')"
+                    style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0"
+                    title="Supprimer">🗑️</button>
+          </div>
           <input type="password" id="api-yt-key" placeholder="Clé depuis console.cloud.google.com" autocomplete="off">
           <div class="stat-sub" id="api-yt-key-current" style="margin-top:4px"></div>
         </div>
 
         <div class="form-group">
-          <div class="field-label">YouTube Channel ID</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="field-label">YouTube Channel ID</div>
+            <button onclick="deleteApiKey('youtube_channel_id')"
+                    style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0"
+                    title="Supprimer">🗑️</button>
+          </div>
           <input type="text" id="api-yt-cid" placeholder="Ex: UCxxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off">
           <div class="stat-sub" id="api-yt-cid-current" style="margin-top:4px"></div>
         </div>
@@ -1755,6 +1807,67 @@
           }
         }
       });
+    }
+
+
+    // ══════════════════════════════════════════════
+    // IMPORT CSV
+    // ══════════════════════════════════════════════
+    async function importCSV() {
+      const platform = document.getElementById('csv-platform').value;
+      const file     = document.getElementById('csv-file').files[0];
+      const okEl     = document.getElementById('csv-success');
+      const errEl    = document.getElementById('csv-error');
+      okEl.style.display = errEl.style.display = 'none';
+
+      if (!file) {
+        errEl.textContent = 'Selectionne un fichier CSV';
+        errEl.style.display = 'block'; return;
+      }
+
+      const form = new FormData();
+      form.append('platform', platform);
+      form.append('creator', currentUser?.creator_name || '');
+      form.append('file', file);
+
+      try {
+        const resp = await fetch(`${API}/api/import/csv`, {
+          method: 'POST',
+          credentials: 'include',
+          body: form
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          okEl.textContent   = `✓ ${data.imported} lignes importees (${data.platform})`;
+          okEl.style.display = 'block';
+          document.getElementById('csv-file').value = '';
+          // Recharge les stats
+          loadStats(viewedCreator);
+        } else {
+          errEl.textContent   = data.error || 'Erreur';
+          errEl.style.display = 'block';
+        }
+      } catch (e) {
+        errEl.textContent   = 'Erreur reseau';
+        errEl.style.display = 'block';
+      }
+    }
+
+
+    // ══════════════════════════════════════════════
+    // SUPPRIMER CLÉ API
+    // ══════════════════════════════════════════════
+    async function deleteApiKey(key) {
+      if (!confirm('Supprimer cette cle API ?')) return;
+      try {
+        const resp = await fetch(`${API}/api/creator/apis/${encodeURIComponent(key)}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        if (resp.ok) {
+          loadMyApis();
+        }
+      } catch (e) {}
     }
 
 

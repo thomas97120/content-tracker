@@ -498,6 +498,40 @@ def swipe_idea():
     return jsonify({"success": True})
 
 
+@app.route("/api/import/csv", methods=["POST"])
+@login_required
+def import_csv():
+    from csv_parser import parse_csv
+    user     = current_user()
+    platform = request.form.get("platform", "")
+    creator  = request.form.get("creator") or user.get("creator_name") or ""
+
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    if "file" not in request.files:
+        return jsonify({"error": "Fichier manquant"}), 400
+
+    file    = request.files["file"]
+    content = file.read().decode("utf-8-sig", errors="replace")
+
+    stats = parse_csv(platform, content)
+    if not stats:
+        return jsonify({"error": "Aucune ligne valide trouvée — vérifie le format CSV et la plateforme sélectionnée"}), 400
+
+    # Ajoute creator_name à chaque row
+    for s in stats:
+        s["creator_name"] = creator
+
+    try:
+        from sheets import get_google_creds, write_stats_to_sheet, get_spreadsheet_id
+        creds    = get_google_creds()
+        sheet_id = get_spreadsheet_id()
+        write_stats_to_sheet(creds, sheet_id, stats, creator_name=creator)
+        return jsonify({"success": True, "imported": len(stats), "platform": platform})
+    except Exception as e:
+        return jsonify({"error": f"Écriture Sheets échouée : {e}"}), 500
+
+
 # ──────────────────────────────────────────────────────────────
 # ROUTES ADMIN
 # ──────────────────────────────────────────────────────────────
