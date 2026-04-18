@@ -1359,7 +1359,10 @@
         for (const p of posts) {
           totalViews += p.vues || 0;
           totalPosts++;
-          if (p.taux_eng) { engSum += p.taux_eng; engCount++; }
+          const eng = p.taux_eng
+            ? p.taux_eng
+            : (p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100) : 0);
+          if (eng > 0) { engSum += eng; engCount++; }
         }
         // Abonnés = dernière valeur connue par plateforme
         if (posts.length) totalFollowers += posts[posts.length - 1].abonnes || 0;
@@ -1434,12 +1437,18 @@
       const dotColor = platformColors[currentPlatform] || 'var(--accent)';
 
       list.innerHTML = posts.map(p => {
-        const eng = p.taux_eng || 0;
+        // Calcule engagement en live si taux_eng absent (YouTube Analytics)
+        const eng = p.taux_eng
+          ? p.taux_eng
+          : (p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100) : 0);
+        const titre = (!p.titre || p.titre === '—')
+          ? (p.format === 'Video' ? `📅 ${p.date}` : p.format || '—')
+          : p.titre;
         return `
           <div class="post-row">
             <div class="post-dot" style="background:${dotColor}"></div>
             <div class="post-info">
-              <div class="post-title">${p.titre || '—'}</div>
+              <div class="post-title">${titre}</div>
               <div class="post-meta">${p.date || ''} · ${fmt(p.vues)} vues · ${fmt(p.likes)} likes</div>
             </div>
             <div class="post-eng ${engClass(eng)}">${eng.toFixed(1)}%</div>
