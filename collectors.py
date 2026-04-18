@@ -218,18 +218,20 @@ def get_tiktok_stats(token_json: str, days=None):
     }
 
     # 1. Infos utilisateur
-    user_resp = requests.post(
+    _ur = requests.post(
         "https://open.tiktokapis.com/v2/user/info/",
         headers=headers,
         json={"fields": ["display_name", "follower_count", "username"]}
-    ).json()
+    )
+    print(f"TikTok user/info status={_ur.status_code} body={_ur.text[:300]}")
+    user_resp = _ur.json()
 
     u          = user_resp.get("data", {}).get("user", {})
     followers  = u.get("follower_count", 0)
     disp_name  = u.get("display_name") or u.get("username", "TikTok")
 
     # 2. Liste vidéos
-    video_resp = requests.post(
+    _vr = requests.post(
         "https://open.tiktokapis.com/v2/video/list/",
         headers=headers,
         json={
@@ -237,10 +239,9 @@ def get_tiktok_stats(token_json: str, days=None):
                           "like_count", "comment_count", "share_count", "view_count"],
             "max_count": min(_days * 3, 20),
         }
-    ).json()
-
-    print(f"TikTok user: followers={followers}, name={disp_name}")
-    print(f"TikTok video_resp: {video_resp}")
+    )
+    print(f"TikTok video/list status={_vr.status_code} body={_vr.text[:300]}")
+    video_resp = _vr.json()
 
     cutoff  = datetime.date.today() - datetime.timedelta(days=_days)
     results = []
