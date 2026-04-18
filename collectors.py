@@ -224,7 +224,13 @@ def get_tiktok_stats(token_json: str, days=None):
         json={"fields": ["display_name", "follower_count", "username"]}
     )
     print(f"TikTok user/info status={_ur.status_code} body={_ur.text[:300]}")
+    if not _ur.text.strip():
+        raise ValueError(f"TikTok user/info: réponse vide (HTTP {_ur.status_code}) — token expiré ou scope manquant")
     user_resp = _ur.json()
+
+    err_code = user_resp.get("error", {}).get("code", "ok")
+    if err_code != "ok":
+        raise ValueError(f"TikTok user/info erreur: {err_code} — {user_resp.get('error', {}).get('message', '')}")
 
     u          = user_resp.get("data", {}).get("user", {})
     followers  = u.get("follower_count", 0)
@@ -241,6 +247,8 @@ def get_tiktok_stats(token_json: str, days=None):
         }
     )
     print(f"TikTok video/list status={_vr.status_code} body={_vr.text[:300]}")
+    if not _vr.text.strip():
+        raise ValueError(f"TikTok video/list: réponse vide (HTTP {_vr.status_code})")
     video_resp = _vr.json()
 
     cutoff  = datetime.date.today() - datetime.timedelta(days=_days)

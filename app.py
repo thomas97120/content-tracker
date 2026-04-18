@@ -509,7 +509,7 @@ def tiktok_connect():
     auth_url = (
         "https://www.tiktok.com/v2/auth/authorize/"
         f"?client_key={client_key}"
-        f"&scope=user.info.basic,video.list"
+        f"&scope=user.info.basic,user.info.stats,video.list"
         f"&response_type=code"
         f"&redirect_uri={redirect_uri}"
         f"&state={state}"
