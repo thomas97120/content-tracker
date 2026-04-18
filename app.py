@@ -12,6 +12,11 @@ import os
 import secrets
 import datetime as dt
 import requests
+import time
+
+# Cache simple en mémoire : {creator_days_key: (timestamp, data)}
+_stats_cache: dict = {}
+CACHE_TTL = 300  # 5 minutes
 
 from collectors import get_youtube_stats, get_instagram_stats, get_facebook_stats
 from sheets import (
@@ -711,6 +716,12 @@ def get_stats(creator):
 
     days = int(request.args.get("days", 7))
 
+    # Cache
+    cache_key = f"{creator}_{days}"
+    cached = _stats_cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < CACHE_TTL:
+        return jsonify(cached[1])
+
     c_apis       = get_creator_apis(creator)
     google_token = c_apis.get("google_token")
     yt_key       = c_apis.get("youtube_api_key")
@@ -780,8 +791,10 @@ def get_stats(creator):
                     "name": row["_channel_name"],
                     "id":   row.get("_channel_id", ""),
                 }
-        return jsonify({"creator": creator, "stats": by_platform, "source": "live",
-                        "warnings": errors, "accounts": account_info, "days": days})
+        resp = {"creator": creator, "stats": by_platform, "source": "live",
+                "warnings": errors, "accounts": account_info, "days": days}
+        _stats_cache[cache_key] = (time.time(), resp)
+        return jsonify(resp)
 
     # Fallback : Sheets
     stats = get_creator_stats(creator)
@@ -990,20 +1003,13 @@ def sync_all():
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "version": "3.0.0"})
+    return jsonify({"status": "ok", "version": "3.1.0"})
 
 
-@app.route("/api/debug/tiktok")
-def debug_tiktok():
-    key = os.environ.get("TIKTOK_CLIENT_KEY", "")
-    sec = os.environ.get("TIKTOK_CLIENT_SECRET", "")
-    return jsonify({
-        "client_key_set":    bool(key),
-        "client_key_prefix": key[:6] if key else "",
-        "client_key_len":    len(key),
-        "secret_set":        bool(sec),
-        "app_url":           APP_URL,
-    })
+@app.route("/manifest.json")
+def manifest():
+    return send_file("manifest.json", mimetype="application/manifest+json")
+
 
 
 @app.route("/tiktokYNyZYXbgRqGTDoE1PzdEm9lnu0YXdXTK.txt")

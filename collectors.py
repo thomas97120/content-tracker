@@ -4,8 +4,26 @@ Même logique que stats_tracker_gsheet.py, adapté pour Flask.
 """
 
 import os
+import re
 import datetime
 import requests
+
+
+def _yt_format(item):
+    """Détecte Short via durée ISO 8601 < 61s OU #shorts dans le titre."""
+    title = item.get("snippet", {}).get("title", "").lower()
+    if "#shorts" in title or "#short" in title:
+        return "Short"
+    dur = item.get("contentDetails", {}).get("duration", "")
+    if dur:
+        # PT1M30S → 90s, PT45S → 45s
+        m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", dur)
+        if m:
+            h, mn, s = (int(x or 0) for x in m.groups())
+            total = h * 3600 + mn * 60 + s
+            if total <= 60:
+                return "Short"
+    return "Video"
 
 DAYS_TO_FETCH         = int(os.environ.get("DAYS_TO_FETCH", 7))
 META_ACCESS_TOKEN     = os.environ.get("META_ACCESS_TOKEN", "")
@@ -59,7 +77,7 @@ def get_youtube_stats(creds, days=None):
     # 3. Stats détaillées
     vids_resp = youtube.videos().list(
         id=",".join(video_ids),
-        part="statistics,snippet"
+        part="statistics,snippet,contentDetails"
     ).execute()
 
     cutoff  = datetime.date.today() - datetime.timedelta(days=_days)
@@ -74,7 +92,7 @@ def get_youtube_stats(creds, days=None):
             "plateforme":    "YouTube",
             "date":          pub_date,
             "titre":         item["snippet"]["title"][:50],
-            "format":        "Short" if item["snippet"].get("categoryId") == "22" else "Video",
+            "format":        _yt_format(item),
             "vues":          int(s.get("viewCount",    0)),
             "reach":         int(s.get("viewCount",    0)),
             "abonnes":       subscribers,
