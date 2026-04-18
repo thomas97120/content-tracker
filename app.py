@@ -413,11 +413,14 @@ def google_connect():
         ]
     )
     flow.redirect_uri = f"{APP_URL}/api/auth/google/callback"
-    auth_url, state  = flow.authorization_url(access_type="offline", prompt="consent")
+    auth_url, state  = flow.authorization_url(
+        access_type="offline", prompt="consent", include_granted_scopes="false"
+    )
 
     user = current_user()
-    session["oauth_state"]   = state
-    session["oauth_creator"] = user.get("creator_name") or user["email"]
+    session["oauth_state"]         = state
+    session["oauth_creator"]       = user.get("creator_name") or user["email"]
+    session["oauth_code_verifier"] = getattr(flow, "code_verifier", None)
     return redirect(auth_url)
 
 
@@ -450,6 +453,11 @@ def google_callback():
         state=state
     )
     flow.redirect_uri = f"{APP_URL}/api/auth/google/callback"
+
+    # Restaure le code_verifier PKCE stocké lors du connect
+    code_verifier = session.get("oauth_code_verifier")
+    if code_verifier:
+        flow.code_verifier = code_verifier
 
     try:
         # Nécessite HTTPS en prod — contourne pour le callback
