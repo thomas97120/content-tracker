@@ -594,6 +594,8 @@
       </select>
     </div>
 
+    <div id="stats-debug" style="display:none;background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#ff8888;line-height:1.8;margin-bottom:12px"></div>
+
     <div class="stat-grid">
       <div class="stat-box">
         <div class="stat-label">Vues totales</div>
@@ -1300,6 +1302,16 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error);
         allStats = data.stats || {};
+
+        // Affiche les erreurs/warnings de fetch live
+        const msgs = [...(data.errors || []), ...(data.warnings || [])];
+        const dbgEl = document.getElementById('stats-debug');
+        if (dbgEl) {
+          dbgEl.innerHTML = msgs.length
+            ? msgs.map(m => `<div>⚠️ ${m}</div>`).join('')
+            : '';
+          dbgEl.style.display = msgs.length ? 'block' : 'none';
+        }
       } catch (e) {
         console.error(e);
         allStats = {};

@@ -620,18 +620,43 @@ def get_stats(creator):
     ig_id        = c_apis.get("instagram_business_id")
     fb_id        = c_apis.get("facebook_page_id")
 
-    live = []
+    live   = []
+    errors = []
 
     # YouTube
     if google_token:
-        live += get_youtube_stats_oauth_creator(google_token)
+        try:
+            rows = get_youtube_stats_oauth_creator(google_token)
+            live += rows
+            if not rows:
+                errors.append("YouTube OAuth : 0 résultats (chaîne vide ou API non activée)")
+        except Exception as e:
+            errors.append(f"YouTube OAuth : {e}")
     elif yt_key and yt_cid:
-        live += get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid)
+        try:
+            rows = get_youtube_stats_apikey(api_key=yt_key, channel_id=yt_cid)
+            live += rows
+            if not rows:
+                errors.append("YouTube API Key : 0 résultats")
+        except Exception as e:
+            errors.append(f"YouTube API Key : {e}")
 
     # Instagram + Facebook
     if meta_token:
-        live += get_instagram_stats(token=meta_token, business_id=ig_id)
-        live += get_facebook_stats(token=meta_token, page_id=fb_id)
+        try:
+            ig = get_instagram_stats(token=meta_token, business_id=ig_id)
+            live += ig
+            if not ig:
+                errors.append("Instagram : 0 résultats")
+        except Exception as e:
+            errors.append(f"Instagram : {e}")
+        try:
+            fb = get_facebook_stats(token=meta_token, page_id=fb_id)
+            live += fb
+            if not fb:
+                errors.append("Facebook : 0 résultats")
+        except Exception as e:
+            errors.append(f"Facebook : {e}")
 
     # Regroupe par plateforme
     if live:
@@ -639,11 +664,11 @@ def get_stats(creator):
         for row in live:
             p = row.get("plateforme", "Autre")
             by_platform.setdefault(p, []).append(row)
-        return jsonify({"creator": creator, "stats": by_platform, "source": "live"})
+        return jsonify({"creator": creator, "stats": by_platform, "source": "live", "warnings": errors})
 
     # Fallback : Sheets
     stats = get_creator_stats(creator)
-    return jsonify({"creator": creator, "stats": stats, "source": "sheets"})
+    return jsonify({"creator": creator, "stats": stats, "source": "sheets", "errors": errors})
 
 
 @app.route("/api/stats/manual", methods=["POST"])
