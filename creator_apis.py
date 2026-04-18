@@ -47,6 +47,7 @@ ALLOWED_KEYS = {
     "youtube_api_key",
     "youtube_channel_id",
     "google_token",
+    "tiktok_token",
 }
 
 _cache: dict | None = None
@@ -100,7 +101,7 @@ def get_masked_apis(creator_name: str) -> dict:
     apis   = get_creator_apis(creator_name)
     result = {}
     # Clés dont la présence suffit (on affiche juste "connecté")
-    TOKEN_KEYS = {"google_token"}
+    TOKEN_KEYS = {"google_token", "tiktok_token"}
     for key in ALLOWED_KEYS:
         val = apis.get(key, "")
         if not val:

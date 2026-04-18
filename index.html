@@ -1016,6 +1016,18 @@
         <a class="account-action primary" id="btn-connect-meta" href="/api/auth/meta/connect">Connecter</a>
       </div>
 
+      <!-- TikTok -->
+      <div class="account-row">
+        <div class="account-info">
+          <div class="account-icon" style="background:rgba(255,255,255,.06)">🎵</div>
+          <div>
+            <div class="account-name">TikTok</div>
+            <span class="account-badge off" id="badge-tiktok">Non connecté</span>
+          </div>
+        </div>
+        <a class="account-action primary" id="btn-connect-tiktok" href="/api/auth/tiktok/connect">Connecter</a>
+      </div>
+
       <!-- Facebook (partagé avec Meta token) -->
       <div class="account-row">
         <div class="account-info">
@@ -2085,6 +2097,18 @@
           if (btnMeta) { btnMeta.className = 'account-action primary'; btnMeta.textContent = 'Connecter'; }
         }
 
+        // TikTok
+        const badgeTT  = document.getElementById('badge-tiktok');
+        const btnTT    = document.getElementById('btn-connect-tiktok');
+        const ttTok    = data['tiktok_token'];
+        if (ttTok && ttTok !== 'Non configuré') {
+          if (badgeTT) { badgeTT.className = 'account-badge on'; badgeTT.textContent = '✅ Connecté'; }
+          if (btnTT)   { btnTT.className = 'account-action'; btnTT.textContent = 'Reconnecter'; }
+        } else {
+          if (badgeTT) { badgeTT.className = 'account-badge off'; badgeTT.textContent = 'Non connecté'; }
+          if (btnTT)   { btnTT.className = 'account-action primary'; btnTT.textContent = 'Connecter'; }
+        }
+
         // Facebook (même token que Meta)
         const badgeFB = document.getElementById('badge-facebook');
         if (metaTok && metaTok !== 'Non configuré') {
@@ -2113,6 +2137,11 @@
         loadMyApis();
       } else if (connected === 'meta') {
         showOAuthStatus('✅ Instagram / Facebook connecté avec succès !');
+        showPage('settings', document.querySelector('#nav-creator .nav-btn:last-child') ||
+                             document.querySelector('#nav-admin .nav-btn:last-child'));
+        loadMyApis();
+      } else if (connected === 'tiktok') {
+        showOAuthStatus('✅ TikTok connecté avec succès !');
         showPage('settings', document.querySelector('#nav-creator .nav-btn:last-child') ||
                              document.querySelector('#nav-admin .nav-btn:last-child'));
         loadMyApis();

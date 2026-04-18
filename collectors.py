@@ -196,6 +196,75 @@ def get_youtube_stats_apikey(api_key=None, channel_id=None, days=None):
 
 
 # ─────────────────────────────────────────────
+#  TIKTOK — OAuth (Login Kit v2)
+# ─────────────────────────────────────────────
+
+def get_tiktok_stats(token_json: str, days=None):
+    """Stats TikTok via Login Kit v2. Laisse les erreurs remonter."""
+    import json as _json
+    _days = days or DAYS_TO_FETCH
+
+    if not token_json or token_json.startswith("enc:"):
+        raise ValueError("TikTok: token chiffré non déchiffré — ENCRYPTION_KEY manquante")
+
+    data         = _json.loads(token_json)
+    access_token = data.get("access_token")
+    if not access_token:
+        raise ValueError("TikTok: access_token manquant dans le token stocké")
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type":  "application/json",
+    }
+
+    # 1. Infos utilisateur
+    user_resp = requests.post(
+        "https://open.tiktokapis.com/v2/user/info/",
+        headers=headers,
+        json={"fields": ["display_name", "follower_count", "username"]}
+    ).json()
+
+    u          = user_resp.get("data", {}).get("user", {})
+    followers  = u.get("follower_count", 0)
+    disp_name  = u.get("display_name") or u.get("username", "TikTok")
+
+    # 2. Liste vidéos
+    video_resp = requests.post(
+        "https://open.tiktokapis.com/v2/video/list/",
+        headers=headers,
+        json={
+            "fields":    ["id", "title", "create_time",
+                          "like_count", "comment_count", "share_count", "view_count"],
+            "max_count": min(_days * 3, 20),
+        }
+    ).json()
+
+    cutoff  = datetime.date.today() - datetime.timedelta(days=_days)
+    results = []
+
+    for v in video_resp.get("data", {}).get("videos", []):
+        pub_date = datetime.date.fromtimestamp(v.get("create_time", 0)).isoformat()
+        if pub_date < str(cutoff):
+            continue
+        results.append({
+            "plateforme":    "TikTok",
+            "date":          pub_date,
+            "titre":         (v.get("title") or "TikTok")[:50],
+            "format":        "Video",
+            "vues":          v.get("view_count",    0),
+            "reach":         v.get("view_count",    0),
+            "abonnes":       followers,
+            "likes":         v.get("like_count",    0),
+            "commentaires":  v.get("comment_count", 0),
+            "partages":      v.get("share_count",   0),
+            "sauvegardes":   0,
+            "_channel_name": disp_name,
+        })
+
+    return results
+
+
+# ─────────────────────────────────────────────
 #  INSTAGRAM
 # ─────────────────────────────────────────────
 

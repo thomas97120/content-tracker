@@ -480,6 +480,94 @@ def google_callback():
 
 
 # ──────────────────────────────────────────────────────────────
+# OAUTH — TIKTOK
+# ──────────────────────────────────────────────────────────────
+@app.route("/api/auth/tiktok/connect")
+@login_required
+def tiktok_connect():
+    import hashlib, base64
+    client_key = os.environ.get("TIKTOK_CLIENT_KEY")
+    if not client_key:
+        return jsonify({"error": "TIKTOK_CLIENT_KEY manquant dans Render"}), 500
+
+    user    = current_user()
+    state   = secrets.token_urlsafe(16)
+    creator = user.get("creator_name") or user["email"]
+
+    # PKCE
+    code_verifier  = secrets.token_urlsafe(40)
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+
+    session["tiktok_state"]         = state
+    session["oauth_creator"]        = creator
+    session["tiktok_code_verifier"] = code_verifier
+
+    redirect_uri = f"{APP_URL}/api/auth/tiktok/callback"
+    auth_url = (
+        "https://www.tiktok.com/v2/auth/authorize/"
+        f"?client_key={client_key}"
+        f"&scope=user.info.basic,video.list"
+        f"&response_type=code"
+        f"&redirect_uri={redirect_uri}"
+        f"&state={state}"
+        f"&code_challenge={code_challenge}"
+        f"&code_challenge_method=S256"
+    )
+    return redirect(auth_url)
+
+
+@app.route("/api/auth/tiktok/callback")
+def tiktok_callback():
+    import json as _json
+    from creator_apis import save_creator_apis
+
+    code    = request.args.get("code")
+    state   = request.args.get("state")
+    creator = session.get("oauth_creator")
+
+    if state != session.get("tiktok_state") or not creator:
+        return redirect("/?error=tiktok_state_mismatch")
+    if not code:
+        err = request.args.get("error_description", "access_denied")
+        return redirect(f"/?error=tiktok_{err[:60]}")
+
+    client_key     = os.environ.get("TIKTOK_CLIENT_KEY")
+    client_secret  = os.environ.get("TIKTOK_CLIENT_SECRET")
+    redirect_uri   = f"{APP_URL}/api/auth/tiktok/callback"
+    code_verifier  = session.get("tiktok_code_verifier", "")
+
+    token_resp = requests.post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "client_key":     client_key,
+            "client_secret":  client_secret,
+            "code":           code,
+            "grant_type":     "authorization_code",
+            "redirect_uri":   redirect_uri,
+            "code_verifier":  code_verifier,
+        }
+    ).json()
+
+    access_token  = token_resp.get("access_token")
+    if not access_token:
+        err = token_resp.get("message", "token_failed")
+        return redirect(f"/?error=tiktok_{str(err)[:60]}")
+
+    token_data = {
+        "access_token":  access_token,
+        "refresh_token": token_resp.get("refresh_token"),
+        "open_id":       token_resp.get("open_id"),
+        "scope":         token_resp.get("scope"),
+        "expires_in":    token_resp.get("expires_in"),
+    }
+    save_creator_apis(creator, {"tiktok_token": _json.dumps(token_data)})
+    return redirect("/?connected=tiktok")
+
+
+# ──────────────────────────────────────────────────────────────
 # OAUTH — META (Instagram + Facebook)
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/auth/meta/connect")
@@ -609,7 +697,7 @@ def get_stats(creator):
     from creator_apis import get_creator_apis
     from collectors import (
         get_youtube_stats_oauth_creator, get_youtube_stats_apikey,
-        get_instagram_stats, get_facebook_stats,
+        get_instagram_stats, get_facebook_stats, get_tiktok_stats,
     )
 
     days = int(request.args.get("days", 7))
@@ -621,6 +709,7 @@ def get_stats(creator):
     meta_token   = c_apis.get("meta_access_token")
     ig_id        = c_apis.get("instagram_business_id")
     fb_id        = c_apis.get("facebook_page_id")
+    tiktok_token = c_apis.get("tiktok_token")
 
     live   = []
     errors = []
@@ -659,6 +748,16 @@ def get_stats(creator):
                 errors.append("Facebook : 0 résultats")
         except Exception as e:
             errors.append(f"Facebook : {e}")
+
+    # TikTok
+    if tiktok_token:
+        try:
+            tt = get_tiktok_stats(tiktok_token, days=days)
+            live += tt
+            if not tt:
+                errors.append("TikTok : 0 résultats")
+        except Exception as e:
+            errors.append(f"TikTok : {e}")
 
     # Regroupe par plateforme
     if live:
