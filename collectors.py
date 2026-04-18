@@ -18,50 +18,50 @@ FACEBOOK_PAGE_ID      = os.environ.get("FACEBOOK_PAGE_ID", "")
 # ─────────────────────────────────────────────
 
 def get_youtube_stats(creds):
-    try:
-        from googleapiclient.discovery import build
+    """Laisse les erreurs remonter pour diagnostic."""
+    from googleapiclient.discovery import build
 
-        youtube           = build("youtube", "v3", credentials=creds)
-        youtube_analytics = build("youtubeAnalytics", "v2", credentials=creds)
+    youtube           = build("youtube", "v3", credentials=creds)
+    youtube_analytics = build("youtubeAnalytics", "v2", credentials=creds)
 
-        channel_resp = youtube.channels().list(part="id,statistics", mine=True).execute()
-        channel      = channel_resp["items"][0]
-        channel_id   = channel["id"]
-        subscribers  = int(channel["statistics"].get("subscriberCount", 0))
+    channel_resp = youtube.channels().list(part="id,statistics", mine=True).execute()
+    items = channel_resp.get("items", [])
+    if not items:
+        raise ValueError("Aucune chaîne YouTube trouvée pour ce compte Google")
 
-        end_date   = datetime.date.today()
-        start_date = end_date - datetime.timedelta(days=DAYS_TO_FETCH)
+    channel     = items[0]
+    channel_id  = channel["id"]
+    subscribers = int(channel["statistics"].get("subscriberCount", 0))
 
-        analytics = youtube_analytics.reports().query(
-            ids=f"channel=={channel_id}",
-            startDate=str(start_date),
-            endDate=str(end_date),
-            metrics="views,likes,comments,shares",
-            dimensions="day"
-        ).execute()
+    end_date   = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=DAYS_TO_FETCH)
 
-        results = []
-        for row in analytics.get("rows", []):
-            date_str, views, likes, comments, shares = row
-            results.append({
-                "plateforme":   "YouTube",
-                "date":         date_str,
-                "titre":        "—",
-                "format":       "Video",
-                "vues":         int(views),
-                "reach":        int(views),
-                "abonnes":      subscribers,
-                "likes":        int(likes),
-                "commentaires": int(comments),
-                "partages":     int(shares),
-                "sauvegardes":  0,
-            })
+    analytics = youtube_analytics.reports().query(
+        ids=f"channel=={channel_id}",
+        startDate=str(start_date),
+        endDate=str(end_date),
+        metrics="views,likes,comments,shares",
+        dimensions="day"
+    ).execute()
 
-        return results
+    results = []
+    for row in analytics.get("rows", []):
+        date_str, views, likes, comments, shares = row
+        results.append({
+            "plateforme":   "YouTube",
+            "date":         date_str,
+            "titre":        "—",
+            "format":       "Video",
+            "vues":         int(views),
+            "reach":        int(views),
+            "abonnes":      subscribers,
+            "likes":        int(likes),
+            "commentaires": int(comments),
+            "partages":     int(shares),
+            "sauvegardes":  0,
+        })
 
-    except Exception as e:
-        print(f"YouTube ERREUR : {e}")
-        return []
+    return results
 
 
 # ─────────────────────────────────────────────
@@ -69,28 +69,27 @@ def get_youtube_stats(creds):
 # ─────────────────────────────────────────────
 
 def get_youtube_stats_oauth_creator(token_json: str):
-    """YouTube via token OAuth stocké par créateur."""
-    try:
-        import json as _json
-        from google.oauth2.credentials import Credentials
-        import google.auth.transport.requests as _greq
+    """YouTube via token OAuth stocké par créateur. Laisse les erreurs remonter."""
+    import json as _json
+    from google.oauth2.credentials import Credentials
+    import google.auth.transport.requests as _greq
 
-        data  = _json.loads(token_json)
-        creds = Credentials(
-            token         = data.get("token"),
-            refresh_token = data.get("refresh_token"),
-            token_uri     = data.get("token_uri", "https://oauth2.googleapis.com/token"),
-            client_id     = data.get("client_id"),
-            client_secret = data.get("client_secret"),
-            scopes        = data.get("scopes"),
-        )
-        if creds.expired and creds.refresh_token:
-            creds.refresh(_greq.Request())
+    if not token_json or token_json.startswith("enc:"):
+        raise ValueError("Token chiffré non déchiffré — ENCRYPTION_KEY manquante ou incorrecte sur Render")
 
-        return get_youtube_stats(creds)
-    except Exception as e:
-        print(f"YouTube OAuth créateur ERREUR : {e}")
-        return []
+    data  = _json.loads(token_json)
+    creds = Credentials(
+        token         = data.get("token"),
+        refresh_token = data.get("refresh_token"),
+        token_uri     = data.get("token_uri", "https://oauth2.googleapis.com/token"),
+        client_id     = data.get("client_id"),
+        client_secret = data.get("client_secret"),
+        scopes        = data.get("scopes"),
+    )
+    if creds.expired and creds.refresh_token:
+        creds.refresh(_greq.Request())
+
+    return get_youtube_stats(creds)
 
 
 # ─────────────────────────────────────────────
