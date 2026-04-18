@@ -992,10 +992,9 @@ def serve_static_txt(filename):
         f = pathlib.Path(filename)
         if f.exists():
             return f.read_text(), 200, {"Content-Type": "text/plain"}
-        # Fallback : retourne le nom du fichier sans extension (format TikTok)
-        token = filename[:-4]  # retire .txt
-        if token.startswith("tiktok"):
-            return token, 200, {"Content-Type": "text/plain"}
+        # Fallback TikTok : retourne le nom de fichier complet comme contenu
+        if filename.startswith("tiktok"):
+            return filename, 200, {"Content-Type": "text/plain; charset=utf-8"}
     return jsonify({"error": "Not found"}), 404
 
 
