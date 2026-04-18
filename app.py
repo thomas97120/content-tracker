@@ -984,6 +984,11 @@ def health():
     return jsonify({"status": "ok", "version": "3.0.0"})
 
 
+@app.route("/tiktokYNyZYXbgRqGTDoE1PzdEm9lnu0YXdXTK.txt")
+def tiktok_verify():
+    return "tiktok-developers-site-verification=YNyZYXbgRqGTDoE1PzdEm9lnu0YXdXTK", 200, {"Content-Type": "text/plain"}
+
+
 @app.route("/<path:filename>")
 def serve_static_txt(filename):
     """Sert les fichiers de vérification de domaine (TikTok, etc.)."""
