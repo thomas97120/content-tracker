@@ -266,6 +266,56 @@
   /* Post rows */
   .post-list { display: flex; flex-direction: column; gap: 10px; }
 
+  /* ── DRAWER VIDÉO ───────────────────────────── */
+  .drawer-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    z-index: 200; opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+  }
+  .drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+  .drawer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--card); border-radius: 20px 20px 0 0;
+    border-top: 1px solid var(--border);
+    padding: 0 20px 40px; z-index: 201;
+    transform: translateY(100%); transition: transform .3s cubic-bezier(.32,.72,0,1);
+    max-height: 85vh; overflow-y: auto;
+  }
+  .drawer.open { transform: translateY(0); }
+  .drawer-handle {
+    width: 36px; height: 4px; background: var(--border);
+    border-radius: 2px; margin: 12px auto 20px; cursor: grab;
+  }
+  .drawer-platform-dot {
+    width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px;
+  }
+  .drawer-title {
+    font-size: 17px; font-weight: 600; line-height: 1.3;
+    margin-bottom: 4px;
+  }
+  .drawer-meta {
+    font-size: 12px; color: var(--muted); margin-bottom: 20px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .drawer-kpis {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;
+  }
+  .drawer-kpi {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 10px; text-align: center;
+  }
+  .drawer-kpi-val  { font-size: 18px; font-weight: 600; }
+  .drawer-kpi-lbl  { font-size: 10px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing:.05em; }
+  .drawer-bar-row  { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .drawer-bar-lbl  { font-size: 12px; color: var(--muted); width: 80px; flex-shrink: 0; }
+  .drawer-bar-wrap { flex: 1; height: 6px; background: var(--surface); border-radius: 3px; overflow: hidden; }
+  .drawer-bar-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+  .drawer-eng-badge {
+    display: inline-block; padding: 6px 16px; border-radius: 20px;
+    font-size: 14px; font-weight: 600; margin-bottom: 20px;
+  }
+
   .post-row {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -1092,6 +1142,23 @@
 
   </div><!-- /#page-container -->
 
+  <!-- Drawer détail vidéo -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+  <div class="drawer" id="video-drawer">
+    <div class="drawer-handle"></div>
+    <div class="drawer-meta" id="drawer-meta"></div>
+    <div class="drawer-title" id="drawer-title"></div>
+    <div class="drawer-meta" id="drawer-date" style="margin-top:4px"></div>
+
+    <div class="drawer-kpis" id="drawer-kpis"></div>
+
+    <div style="margin-bottom:8px;font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Répartition engagement</div>
+    <div id="drawer-bars"></div>
+
+    <div style="margin-top:16px;margin-bottom:6px;font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Taux d'engagement</div>
+    <div id="drawer-eng"></div>
+  </div>
+
   <!-- Bottom nav (creator) -->
   <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(4, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this)">
@@ -1146,9 +1213,10 @@
     let currentPlatform = null; // plateforme sélectionnée (Instagram, TikTok…)
     let allStats    = {};       // toutes les stats récupérées depuis l'API
     let allAccounts = {};       // nom du compte par plateforme {YouTube: {name, id}}
-    let currentDays = 7;
-    let currentSort = 'date';
-    let sortAsc     = false;
+    let currentDays  = 7;
+    let currentSort  = 'date';
+    let sortAsc      = false;
+    let currentPosts = [];
 
 
     // ══════════════════════════════════════════════
@@ -1574,6 +1642,7 @@
         }
         return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
       });
+      currentPosts = posts;
 
       const platformColors = {
         Instagram: 'var(--ig)', YouTube: 'var(--yt)',
@@ -1588,8 +1657,9 @@
         const titre = (!p.titre || p.titre === '—')
           ? (p.format === 'Video' || p.format === 'Short' ? `📅 ${p.date}` : p.format || '—')
           : p.titre;
+        const idx = i;
         return `
-      <div class="post-row">
+      <div class="post-row" style="cursor:pointer" onclick="openDrawer(${idx})">
         <div class="post-dot" style="background:${dotColor}"></div>
         <div class="post-info" style="flex:1;min-width:0">
           <div class="post-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titre}</div>
@@ -1601,10 +1671,90 @@
             <span class="post-stat" style="color:${eng >= 5 ? 'var(--green)' : eng >= 2 ? 'var(--amber)' : 'var(--red)'}">${eng.toFixed(1)}%</span>
           </div>
         </div>
+        <div style="font-size:18px;color:var(--muted);padding-left:8px">›</div>
       </div>`;
       }).join('');
 
       renderChart();
+    }
+
+
+    // ══════════════════════════════════════════════
+    // DRAWER — DÉTAIL VIDÉO
+    // ══════════════════════════════════════════════
+    const platformColors = {
+      Instagram: 'var(--ig)', YouTube: 'var(--yt)',
+      Facebook:  'var(--fb)', TikTok:  '#69c9d0', Snapchat: 'var(--snap)'
+    };
+
+    function openDrawer(idx) {
+      const p = currentPosts[idx];
+      if (!p) return;
+
+      const eng = p.taux_eng
+        ? p.taux_eng
+        : (p.vues > 0 ? ((p.likes + p.commentaires + p.partages) / p.vues * 100) : 0);
+
+      const color   = platformColors[p.plateforme] || 'var(--accent)';
+      const engColor = eng >= 5 ? 'var(--green)' : eng >= 2 ? 'var(--amber)' : 'var(--red)';
+
+      // Titre + meta
+      document.getElementById('drawer-title').textContent = p.titre && p.titre !== '—' ? p.titre : `Vidéo du ${p.date}`;
+      document.getElementById('drawer-meta').innerHTML =
+        `<span class="drawer-platform-dot" style="background:${color}"></span>${p.plateforme} · ${p.format || 'Video'}`;
+      document.getElementById('drawer-date').textContent = `📅 ${p.date}${p.abonnes ? ' · ' + fmt(p.abonnes) + ' abonnés' : ''}`;
+
+      // KPIs 3 colonnes
+      const kpis = [
+        { val: fmt(p.vues),          lbl: 'Vues',          color: 'var(--accent)' },
+        { val: fmt(p.likes || 0),    lbl: 'Likes',         color: 'var(--red)' },
+        { val: fmt(p.commentaires||0),lbl: 'Commentaires', color: 'var(--green)' },
+        { val: fmt(p.partages || 0), lbl: 'Partages',      color: 'var(--amber)' },
+        { val: fmt(p.sauvegardes||0),lbl: 'Sauvegardes',  color: 'var(--accent2)' },
+        { val: eng.toFixed(1) + '%', lbl: 'Engagement',    color: engColor },
+      ];
+      document.getElementById('drawer-kpis').innerHTML = kpis.map(k =>
+        `<div class="drawer-kpi">
+          <div class="drawer-kpi-val" style="color:${k.color}">${k.val}</div>
+          <div class="drawer-kpi-lbl">${k.lbl}</div>
+        </div>`
+      ).join('');
+
+      // Barres de répartition
+      const total = (p.likes || 0) + (p.commentaires || 0) + (p.partages || 0) + (p.sauvegardes || 0);
+      const bars = [
+        { lbl: 'Likes',       val: p.likes || 0,        color: 'var(--red)' },
+        { lbl: 'Commentaires',val: p.commentaires || 0,  color: 'var(--green)' },
+        { lbl: 'Partages',    val: p.partages || 0,      color: 'var(--amber)' },
+        { lbl: 'Sauvegardes', val: p.sauvegardes || 0,   color: 'var(--accent2)' },
+      ];
+      document.getElementById('drawer-bars').innerHTML = bars.map(b => {
+        const pct = total > 0 ? Math.round(b.val / total * 100) : 0;
+        return `<div class="drawer-bar-row">
+          <div class="drawer-bar-lbl">${b.lbl}</div>
+          <div class="drawer-bar-wrap">
+            <div class="drawer-bar-fill" style="width:${pct}%;background:${b.color}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);width:32px;text-align:right">${fmt(b.val)}</div>
+        </div>`;
+      }).join('');
+
+      // Badge engagement
+      document.getElementById('drawer-eng').innerHTML =
+        `<span class="drawer-eng-badge" style="background:${engColor}22;color:${engColor}">
+          ${eng >= 5 ? '🔥 Excellent' : eng >= 2 ? '✅ Bon' : '⚠️ Faible'} · ${eng.toFixed(2)}%
+        </span>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">
+          (likes + commentaires + partages) ÷ vues × 100
+        </div>`;
+
+      document.getElementById('drawer-overlay').classList.add('open');
+      document.getElementById('video-drawer').classList.add('open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer-overlay').classList.remove('open');
+      document.getElementById('video-drawer').classList.remove('open');
     }
 
 
