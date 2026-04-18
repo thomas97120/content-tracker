@@ -984,6 +984,21 @@ def health():
     return jsonify({"status": "ok", "version": "3.0.0"})
 
 
+@app.route("/<path:filename>")
+def serve_static_txt(filename):
+    """Sert les fichiers de vérification de domaine (TikTok, etc.)."""
+    if filename.endswith(".txt") and "/" not in filename:
+        import pathlib
+        f = pathlib.Path(filename)
+        if f.exists():
+            return f.read_text(), 200, {"Content-Type": "text/plain"}
+        # Fallback : retourne le nom du fichier sans extension (format TikTok)
+        token = filename[:-4]  # retire .txt
+        if token.startswith("tiktok"):
+            return token, 200, {"Content-Type": "text/plain"}
+    return jsonify({"error": "Not found"}), 404
+
+
 @app.route("/", methods=["GET"])
 def serve_index():
     return send_file("index.html")
