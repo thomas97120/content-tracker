@@ -11,6 +11,7 @@ import json
 import os
 import secrets
 import datetime as dt
+import requests
 
 from collectors import get_youtube_stats, get_instagram_stats, get_facebook_stats
 from sheets import (
