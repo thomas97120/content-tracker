@@ -1064,14 +1064,33 @@ def import_csv():
     for s in stats:
         s["creator_name"] = creator
 
+    warnings = []
+
+    # ── Stocke dans history_store (SQLite) ──
+    try:
+        from history_store import upsert_posts
+        upsert_posts(creator, stats)
+    except Exception as e:
+        warnings.append(f"history_store: {e}")
+
+    # ── Efface le cache stats pour forcer rechargement ──
+    _clear_creator_cache(creator)
+
+    # ── Écriture Google Sheets (optionnelle — skip si token absent) ──
     try:
         from sheets import get_google_creds, write_stats_to_sheet, get_spreadsheet_id
         creds    = get_google_creds()
         sheet_id = get_spreadsheet_id()
         write_stats_to_sheet(creds, sheet_id, stats, creator_name=creator)
-        return jsonify({"success": True, "imported": len(stats), "platform": platform})
     except Exception as e:
-        return jsonify({"error": f"Écriture Sheets échouée : {e}"}), 500
+        warnings.append(f"Sheets ignoré (optionnel) : {str(e)[:60]}")
+
+    return jsonify({
+        "success":  True,
+        "imported": len(stats),
+        "platform": platform,
+        "warnings": warnings,
+    })
 
 
 # ──────────────────────────────────────────────────────────────
