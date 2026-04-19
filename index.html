@@ -679,6 +679,27 @@ if ('serviceWorker' in navigator) {
 .rec-priority-medium { border-left:3px solid var(--amber);  padding-left:10px; }
 .rec-priority-low    { border-left:3px solid var(--muted);  padding-left:10px; }
 
+/* ── CALENDRIER ──────────────────────────────── */
+.cal-grid { display: grid; grid-template-columns: 28px repeat(7, 1fr); gap: 3px; font-size: 10px; }
+.cal-cell  { aspect-ratio:1; border-radius:4px; background:var(--surface); display:flex; align-items:center; justify-content:center; position:relative; }
+.cal-dot   { width:6px; height:6px; border-radius:50%; }
+
+/* ── GOALS PROGRESS ──────────────────────────── */
+.goal-bar-wrap { flex:1; height:8px; background:var(--surface); border-radius:4px; overflow:hidden; }
+.goal-bar-fill { height:100%; border-radius:4px; transition:width 0.6s ease; }
+.goal-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.goal-lbl { font-size:12px; color:var(--muted); width:80px; flex-shrink:0; }
+.goal-val { font-size:11px; color:var(--muted); width:56px; text-align:right; flex-shrink:0; }
+
+/* ── STREAK / FLAME ──────────────────────────── */
+.flame-card {
+  background: linear-gradient(135deg, rgba(255,107,53,0.15), rgba(255,179,71,0.08));
+  border: 1px solid rgba(255,107,53,0.3);
+  border-radius: var(--r);
+  padding: 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+
 /* ── TOAST ───────────────────────────────────── */
 #toast-container {
   position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
@@ -922,7 +943,7 @@ if ('serviceWorker' in navigator) {
 
     <div id="stats-debug" style="display:none;background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#ff8888;line-height:1.8;margin-bottom:12px"></div>
 
-    <!-- KPIs 2x3 -->
+    <!-- KPIs 2x3 + streak -->
     <div class="kpi-grid">
       <div class="kpi-box">
         <div class="kpi-label">Vues totales</div>
@@ -953,6 +974,22 @@ if ('serviceWorker' in navigator) {
         <div class="kpi-label">Likes totaux</div>
         <div class="kpi-value red" id="kpi-likes">—</div>
         <div class="kpi-sub" id="kpi-comments-sub">— commentaires</div>
+      </div>
+    </div>
+
+    <!-- Streak tracker -->
+    <div class="flame-card" id="streak-card" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div class="kpi-label">🔥 Streak hebdo</div>
+          <div style="font-size:26px;font-weight:700;color:#ff6b35;font-family:'DM Mono',monospace;margin:2px 0" id="streak-value">—</div>
+          <div class="kpi-sub" id="streak-sub">semaines consécutives</div>
+        </div>
+        <div style="text-align:right">
+          <div class="kpi-label">Record</div>
+          <div style="font-size:18px;font-weight:600;color:var(--amber);font-family:'DM Mono',monospace" id="streak-best">—</div>
+          <div class="kpi-sub" id="streak-week-posts">— posts cette semaine</div>
+        </div>
       </div>
     </div>
 
@@ -989,6 +1026,48 @@ if ('serviceWorker' in navigator) {
       </div>
       <div id="coach-insights"></div>
       <div id="coach-recs" style="display:none"></div>
+    </div>
+
+    <!-- Objectifs de la semaine -->
+    <div class="card" id="goals-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="card-title" style="margin:0">🎯 Objectifs de la semaine</div>
+        <button class="sort-btn" onclick="toggleGoalsForm()">✏️ Modifier</button>
+      </div>
+      <!-- Formulaire inline (caché par défaut) -->
+      <div id="goals-form" style="display:none;margin-bottom:16px;background:var(--surface);border-radius:var(--r-sm);padding:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+          <div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Vues / semaine</div>
+            <input type="number" id="goal-views" placeholder="0" min="0" style="padding:8px 10px;font-size:13px">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Posts / semaine</div>
+            <input type="number" id="goal-posts" placeholder="0" min="0" style="padding:8px 10px;font-size:13px">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Engagement %</div>
+            <input type="number" id="goal-eng" placeholder="0" min="0" step="0.1" style="padding:8px 10px;font-size:13px">
+          </div>
+        </div>
+        <button class="sort-btn" style="background:var(--accent);color:#fff;border-color:transparent" onclick="saveGoals()">💾 Sauvegarder</button>
+      </div>
+      <!-- Barres de progression -->
+      <div id="goals-bars">
+        <div style="font-size:13px;color:var(--muted)">Chargement…</div>
+      </div>
+    </div>
+
+    <!-- Revenu estimé -->
+    <div class="card" id="revenue-card" style="display:none">
+      <div class="card-title">💰 Revenu estimé</div>
+      <div id="revenue-content"></div>
+    </div>
+
+    <!-- Calendrier de publication -->
+    <div class="card" id="calendar-card" style="display:none">
+      <div class="card-title">🗓 Calendrier</div>
+      <div id="calendar-content"></div>
     </div>
 
     <!-- Prédiction prochain post -->
@@ -1265,9 +1344,14 @@ if ('serviceWorker' in navigator) {
         <strong style="color:var(--text)">YouTube</strong> : jusqu'à 50 vidéos récentes<br>
         <strong style="color:var(--text)">TikTok</strong> : 20 dernières vidéos (limite API)
       </div>
-      <button class="btn btn-primary" id="sync-history-btn" onclick="syncHistory()">
-        ⬇ Télécharger tout l'historique
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="sync-history-btn" onclick="syncHistory()" style="flex:1">
+          ⬇ Télécharger tout l'historique
+        </button>
+        <button class="btn btn-secondary" onclick="exportExcel()" style="flex:none;padding:14px 16px" title="Exporter Excel">
+          📥 Excel
+        </button>
+      </div>
       <div class="success-msg" id="sync-history-ok" style="margin-top:10px"></div>
       <div class="login-error"  id="sync-history-err" style="margin-top:10px"></div>
     </div>
@@ -1603,6 +1687,17 @@ if ('serviceWorker' in navigator) {
       </div>
     </div>
 
+    <!-- Email hebdomadaire -->
+    <div class="card">
+      <div class="card-title">📧 Résumé hebdomadaire</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+        Envoie un résumé de tes stats de la semaine par email (nécessite que les stats 7j soient chargées).
+      </div>
+      <button class="btn btn-secondary" onclick="sendWeeklyEmail()">📧 Envoyer résumé maintenant</button>
+      <div class="success-msg" id="email-weekly-ok" style="margin-top:8px"></div>
+      <div class="login-error" id="email-weekly-err" style="margin-top:8px"></div>
+    </div>
+
     <!-- Changer mot de passe -->
     <div class="card">
       <div class="card-title">🔒 Changer le mot de passe</div>
@@ -1816,6 +1911,8 @@ if ('serviceWorker' in navigator) {
         toast('Stats à jour ✓', 'success');
         updateLastUpdated();
         loadInsights();
+        loadGoals();
+        loadStreak();
       } catch (e) {
         toast('Erreur de rechargement', 'error');
       } finally {
@@ -2102,6 +2199,8 @@ if ('serviceWorker' in navigator) {
       checkOnboarding();
       updateLastUpdated();
       loadInsights();
+      loadGoals();
+      loadStreak();
     }
 
     async function fetchCreatorList() {
@@ -2329,6 +2428,9 @@ if ('serviceWorker' in navigator) {
       } else if (card) {
         card.style.display = 'none';
       }
+
+      // Revenu estimé
+      renderRevenue();
     }
 
 
@@ -2394,6 +2496,11 @@ if ('serviceWorker' in navigator) {
       renderAccountBadge();
       renderSummary();
       renderPosts();
+      // Re-render goals bars with new platform filter
+      const kpis = calcKpis(platform
+        ? { [platform]: allStats[platform] || [] }
+        : allStats);
+      renderGoals(_currentGoals, kpis);
     }
 
     function renderAccountBadge() {
@@ -2494,6 +2601,7 @@ if ('serviceWorker' in navigator) {
       renderWeekdayChart();
       renderFormatChart();
       renderPlatformDonut();
+      renderCalendar();
     }
 
 
@@ -4418,6 +4526,351 @@ if ('serviceWorker' in navigator) {
           loadMyApis();
         }
       } catch (e) {}
+    }
+
+
+    // ══════════════════════════════════════════════
+    // OBJECTIFS HEBDOMADAIRES (Goals)
+    // ══════════════════════════════════════════════
+    let _currentGoals = { views_per_week: 0, posts_per_week: 0, engagement_pct: 0 };
+
+    async function loadGoals() {
+      if (!viewedCreator) return;
+      try {
+        const resp = await fetch(`${API}/api/goals/${encodeURIComponent(viewedCreator)}`, { credentials: 'include' });
+        if (!resp.ok) return;
+        _currentGoals = await resp.json();
+        // Calcule KPIs pour la période courante (7j proxy)
+        const statsAll = currentPlatformFilter
+          ? { [currentPlatformFilter]: allStats[currentPlatformFilter] || [] }
+          : allStats;
+        const kpis = calcKpis(statsAll);
+        renderGoals(_currentGoals, kpis);
+      } catch (e) { console.error('Goals error:', e); }
+    }
+
+    async function saveGoals() {
+      if (!viewedCreator) return;
+      const goals = {
+        views_per_week:  parseFloat(document.getElementById('goal-views').value)  || 0,
+        posts_per_week:  parseFloat(document.getElementById('goal-posts').value)  || 0,
+        engagement_pct:  parseFloat(document.getElementById('goal-eng').value)    || 0,
+      };
+      try {
+        await fetch(`${API}/api/goals/${encodeURIComponent(viewedCreator)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(goals),
+        });
+        _currentGoals = goals;
+        document.getElementById('goals-form').style.display = 'none';
+        const kpis = calcKpis(currentPlatformFilter
+          ? { [currentPlatformFilter]: allStats[currentPlatformFilter] || [] }
+          : allStats);
+        renderGoals(goals, kpis);
+        toast('Objectifs sauvegardés ✓', 'success');
+      } catch (e) { toast('Erreur sauvegarde objectifs', 'error'); }
+    }
+
+    function toggleGoalsForm() {
+      const f = document.getElementById('goals-form');
+      const visible = f.style.display !== 'none';
+      f.style.display = visible ? 'none' : '';
+      if (!visible) {
+        document.getElementById('goal-views').value = _currentGoals.views_per_week || '';
+        document.getElementById('goal-posts').value = _currentGoals.posts_per_week || '';
+        document.getElementById('goal-eng').value   = _currentGoals.engagement_pct || '';
+      }
+    }
+
+    function renderGoals(goals, kpis) {
+      const container = document.getElementById('goals-bars');
+      if (!container) return;
+
+      const items = [
+        {
+          lbl: 'Vues',
+          current: kpis.totalViews,
+          target: goals.views_per_week,
+          color: 'var(--accent)',
+          fmtFn: v => fmt(Math.round(v)),
+        },
+        {
+          lbl: 'Posts',
+          current: kpis.totalPosts,
+          target: goals.posts_per_week,
+          color: 'var(--amber)',
+          fmtFn: v => String(Math.round(v)),
+        },
+        {
+          lbl: 'Engagement',
+          current: kpis.avgEng,
+          target: goals.engagement_pct,
+          color: 'var(--green)',
+          fmtFn: v => v.toFixed(1) + '%',
+        },
+      ];
+
+      if (items.every(i => i.target === 0)) {
+        container.innerHTML = '<div style="font-size:13px;color:var(--muted)">Aucun objectif défini. Clique sur ✏️ Modifier pour en ajouter.</div>';
+        return;
+      }
+
+      container.innerHTML = items.map(item => {
+        if (item.target === 0) return '';
+        const pct = Math.min(Math.round(item.current / item.target * 100), 100);
+        const reached = pct >= 100;
+        return `
+          <div class="goal-row">
+            <div class="goal-lbl">${item.lbl}</div>
+            <div class="goal-bar-wrap">
+              <div class="goal-bar-fill" style="width:${pct}%;background:${reached ? 'var(--green)' : item.color}"></div>
+            </div>
+            <div class="goal-val">
+              ${item.fmtFn(item.current)} / ${item.fmtFn(item.target)}
+              ${reached ? ' ✓' : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+
+    // ══════════════════════════════════════════════
+    // CALENDRIER DE PUBLICATION
+    // ══════════════════════════════════════════════
+    function renderCalendar() {
+      const card    = document.getElementById('calendar-card');
+      const content = document.getElementById('calendar-content');
+      if (!card || !content) return;
+
+      // Collecte toutes les dates avec plateforme
+      const postsByDate = {};
+      const pColors = {
+        Instagram: 'var(--ig)', YouTube: 'var(--yt)',
+        Facebook: 'var(--fb)', TikTok: '#69c9d0', Snapchat: 'var(--snap)'
+      };
+
+      for (const [plat, posts] of Object.entries(allStats)) {
+        for (const p of posts) {
+          const d = p.date || '';
+          if (!d) continue;
+          if (!postsByDate[d]) postsByDate[d] = [];
+          postsByDate[d].push(pColors[plat] || 'var(--accent)');
+        }
+      }
+
+      if (!Object.keys(postsByDate).length) {
+        card.style.display = 'none';
+        return;
+      }
+
+      card.style.display = '';
+
+      // Calcule plage : 2 derniers mois
+      const today = new Date();
+      const twoMonthsAgo = new Date(today);
+      twoMonthsAgo.setDate(today.getDate() - 56); // ~8 semaines
+
+      // Construit les jours
+      const dayNames = ['L','M','M','J','V','S','D'];
+      let html = '<div class="cal-grid">';
+      // Header
+      html += '<div class="cal-cell" style="background:transparent"></div>';
+      dayNames.forEach(d => {
+        html += `<div class="cal-cell" style="background:transparent;color:var(--muted);font-size:9px">${d}</div>`;
+      });
+
+      // Génère les semaines
+      // Trouve le lundi de twoMonthsAgo
+      const start = new Date(twoMonthsAgo);
+      const dow = (start.getDay() + 6) % 7; // 0=Mon
+      start.setDate(start.getDate() - dow);
+
+      const cur = new Date(start);
+      while (cur <= today) {
+        // Numéro de semaine (label gauche)
+        const yr = cur.getFullYear();
+        const tmp = new Date(Date.UTC(yr, cur.getMonth(), cur.getDate()));
+        tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
+        const wn = Math.ceil(((tmp - new Date(Date.UTC(yr,0,1))) / 86400000 + 1) / 7);
+        html += `<div class="cal-cell" style="background:transparent;color:var(--muted);font-size:9px">S${wn}</div>`;
+
+        for (let i = 0; i < 7; i++) {
+          const iso = cur.toISOString().slice(0, 10);
+          const isFuture = cur > today;
+          const colors = postsByDate[iso] || [];
+          const isToday = iso === today.toISOString().slice(0, 10);
+
+          let cellStyle = `border:1px solid ${isToday ? 'var(--accent)' : 'transparent'};`;
+          if (isFuture) cellStyle += 'opacity:0.3;';
+
+          if (colors.length > 0) {
+            html += `<div class="cal-cell" style="${cellStyle}" title="${iso}: ${colors.length} post(s)">`;
+            // Affiche jusqu'à 3 points
+            colors.slice(0, 3).forEach(c => {
+              html += `<div class="cal-dot" style="background:${c}"></div>`;
+            });
+            html += '</div>';
+          } else {
+            html += `<div class="cal-cell" style="${cellStyle}"></div>`;
+          }
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+      html += '</div>';
+
+      // Légende plateformes
+      const platforms = Object.keys(allStats).filter(p => allStats[p]?.length);
+      if (platforms.length > 1) {
+        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">';
+        platforms.forEach(p => {
+          html += `<span style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${pColors[p] || 'var(--accent)'}"></span>${p}
+          </span>`;
+        });
+        html += '</div>';
+      }
+
+      content.innerHTML = html;
+    }
+
+
+    // ══════════════════════════════════════════════
+    // REVENU ESTIMÉ
+    // ══════════════════════════════════════════════
+    function renderRevenue() {
+      const card    = document.getElementById('revenue-card');
+      const content = document.getElementById('revenue-content');
+      if (!card || !content) return;
+
+      const CPM = { YouTube: 3.0, TikTok: 0.02, Instagram: 1.5, Facebook: 0.8 };
+
+      let total = 0;
+      const details = [];
+
+      for (const [plat, posts] of Object.entries(allStats)) {
+        if (!posts?.length) continue;
+        const rate = CPM[plat];
+        if (!rate) continue;
+        const views = posts.reduce((s, p) => s + (p.vues || 0), 0);
+        const rev = views * rate / 1000;
+        total += rev;
+        details.push({ plat, views, rev });
+      }
+
+      if (total === 0) {
+        card.style.display = 'none';
+        return;
+      }
+      card.style.display = '';
+
+      const fmtMoney = v => v >= 1000 ? `$${(v/1000).toFixed(1)}K` : `$${v.toFixed(0)}`;
+
+      content.innerHTML = `
+        <div style="font-size:28px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace;margin-bottom:4px">${fmtMoney(total)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">estimation CPM moyenne</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${details.map(d => `
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--muted)">${d.plat} <span style="font-size:11px">(${fmt(d.views)} vues)</span></span>
+              <span style="font-size:13px;font-weight:600;color:var(--green);font-family:'DM Mono',monospace">${fmtMoney(d.rev)}</span>
+            </div>`).join('')}
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">
+          Basé sur CPM moyens estimatifs : YouTube $3, Instagram $1.5, Facebook $0.8, TikTok $0.02 / 1000 vues.
+        </div>`;
+    }
+
+
+    // ══════════════════════════════════════════════
+    // STREAK TRACKER
+    // ══════════════════════════════════════════════
+    async function loadStreak() {
+      if (!viewedCreator) return;
+      try {
+        const resp = await fetch(
+          `${API}/api/stats/${encodeURIComponent(viewedCreator)}/streak`,
+          { credentials: 'include' }
+        );
+        if (!resp.ok) return;
+        const data = await resp.json();
+        renderStreak(data);
+      } catch (e) { console.error('Streak error:', e); }
+    }
+
+    function renderStreak(data) {
+      const card = document.getElementById('streak-card');
+      if (!card) return;
+      const streak = data.streak || 0;
+      const best   = data.best_streak || 0;
+      const weekP  = data.posts_this_week || 0;
+
+      if (best === 0 && streak === 0) { card.style.display = 'none'; return; }
+      card.style.display = '';
+
+      document.getElementById('streak-value').textContent   = streak + (streak >= 3 ? ' 🔥' : '');
+      document.getElementById('streak-best').textContent    = best;
+      document.getElementById('streak-sub').textContent     = streak === 1 ? 'semaine consécutive' : 'semaines consécutives';
+      document.getElementById('streak-week-posts').textContent = `${weekP} post${weekP !== 1 ? 's' : ''} cette semaine`;
+    }
+
+
+    // ══════════════════════════════════════════════
+    // EXPORT EXCEL
+    // ══════════════════════════════════════════════
+    function exportExcel() {
+      if (!viewedCreator) { toast('Aucun créateur sélectionné', 'error'); return; }
+      const url = `${API}/api/export/${encodeURIComponent(viewedCreator)}/excel`;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stats_${viewedCreator}.csv`;
+      // Inclure credentials via fetch puis Blob
+      fetch(url, { credentials: 'include' })
+        .then(r => {
+          if (!r.ok) throw new Error('Export échoué');
+          return r.blob();
+        })
+        .then(blob => {
+          const bUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = bUrl;
+          link.download = `stats_${viewedCreator}.csv`;
+          link.click();
+          URL.revokeObjectURL(bUrl);
+          toast('Export Excel téléchargé ✓', 'success');
+        })
+        .catch(e => toast('Erreur export : ' + e.message, 'error'));
+    }
+
+
+    // ══════════════════════════════════════════════
+    // EMAIL HEBDO
+    // ══════════════════════════════════════════════
+    async function sendWeeklyEmail() {
+      if (!viewedCreator) { toast('Aucun créateur sélectionné', 'error'); return; }
+      const okEl  = document.getElementById('email-weekly-ok');
+      const errEl = document.getElementById('email-weekly-err');
+      okEl.style.display = errEl.style.display = 'none';
+
+      try {
+        const resp = await fetch(
+          `${API}/api/email/weekly/${encodeURIComponent(viewedCreator)}`,
+          { method: 'POST', credentials: 'include' }
+        );
+        const data = await resp.json();
+        if (resp.ok && data.success) {
+          okEl.textContent   = '✓ Email envoyé avec succès !';
+          okEl.style.display = 'block';
+          toast('Email envoyé ✓', 'success');
+        } else {
+          errEl.textContent   = data.error || 'Erreur lors de l\'envoi';
+          errEl.style.display = 'block';
+        }
+      } catch (e) {
+        errEl.textContent   = 'Erreur réseau';
+        errEl.style.display = 'block';
+      }
     }
 
 

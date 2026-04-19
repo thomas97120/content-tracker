@@ -1047,6 +1047,205 @@ def swipe_idea():
     return jsonify({"success": True})
 
 
+@app.route("/api/goals/<creator>", methods=["GET"])
+@login_required
+def get_goals_route(creator):
+    if not can_access_creator(creator): return jsonify({"error":"Accès interdit"}), 403
+    from goals_store import get_goals
+    return jsonify(get_goals(creator))
+
+@app.route("/api/goals/<creator>", methods=["POST"])
+@login_required
+def set_goals_route(creator):
+    if not can_access_creator(creator): return jsonify({"error":"Accès interdit"}), 403
+    from goals_store import set_goals
+    data = request.get_json(silent=True) or {}
+    set_goals(creator, {
+        "views_per_week":   int(data.get("views_per_week", 0)),
+        "posts_per_week":   int(data.get("posts_per_week", 0)),
+        "engagement_pct":   float(data.get("engagement_pct", 0)),
+    })
+    return jsonify({"success": True})
+
+
+@app.route("/api/stats/<creator>/streak", methods=["GET"])
+@login_required
+def get_streak(creator):
+    if not can_access_creator(creator): return jsonify({"error":"Accès interdit"}), 403
+    from history_store import get_history
+    posts = get_history(creator, days=365)
+    if not posts: return jsonify({"streak": 0, "best_streak": 0, "posts_this_week": 0})
+
+    import datetime
+    today = datetime.date.today()
+
+    # Groupe par semaine ISO
+    weeks = {}
+    for p in posts:
+        try:
+            d = datetime.date.fromisoformat(p.get("post_date") or p.get("date",""))
+            yr, wk, _ = d.isocalendar()
+            key = f"{yr}-W{wk:02d}"
+            weeks[key] = weeks.get(key, 0) + 1
+        except: continue
+
+    # Streak courant (semaines consécutives avec ≥1 post)
+    yr, wk, _ = today.isocalendar()
+    best   = 0
+    cur    = 0
+    # Parcours semaines triées
+    all_weeks = sorted(weeks.keys())
+    for i, w in enumerate(all_weeks):
+        if weeks[w] >= 1:
+            cur += 1
+            best = max(best, cur)
+        else:
+            cur = 0
+
+    # Streak actuel depuis la dernière semaine
+    current_week = f"{yr}-W{wk:02d}"
+    streak = 0
+    w_idx = sorted(weeks.keys())
+    w_idx.reverse()
+    expected_yr, expected_wk = yr, wk
+    for w in w_idx:
+        exp = f"{expected_yr}-W{expected_wk:02d}"
+        if w == exp and weeks[w] >= 1:
+            streak += 1
+            # semaine précédente
+            d_prev = today - datetime.timedelta(weeks=streak)
+            expected_yr, expected_wk, _ = d_prev.isocalendar()
+        else:
+            break
+
+    posts_this_week = weeks.get(current_week, 0)
+    return jsonify({"streak": streak, "best_streak": best, "posts_this_week": posts_this_week})
+
+
+@app.route("/api/export/<creator>/excel", methods=["GET"])
+@login_required
+def export_excel(creator):
+    if not can_access_creator(creator): return jsonify({"error":"Accès interdit"}), 403
+    from history_store import get_history
+    import io, csv as csv_module
+    posts = get_history(creator, days=3650)
+
+    output = io.StringIO()
+    output.write('\ufeff')  # BOM UTF-8 pour Excel
+    writer = csv_module.DictWriter(output, fieldnames=[
+        "date","plateforme","titre","format","vues","reach",
+        "likes","commentaires","partages","sauvegardes","abonnes"
+    ], extrasaction='ignore')
+    writer.writeheader()
+    for p in posts:
+        writer.writerow({
+            "date": p.get("post_date",""),
+            "plateforme": p.get("platform",""),
+            "titre": p.get("title",""),
+            "format": p.get("format",""),
+            "vues": p.get("views",0),
+            "reach": p.get("reach",0),
+            "likes": p.get("likes",0),
+            "commentaires": p.get("comments",0),
+            "partages": p.get("shares",0),
+            "sauvegardes": p.get("saves",0),
+            "abonnes": p.get("followers",0),
+        })
+
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f"attachment; filename=stats_{creator}.csv"}
+    )
+
+
+@app.route("/api/email/weekly/<creator>", methods=["POST"])
+@login_required
+def send_weekly_email(creator):
+    if not can_access_creator(creator): return jsonify({"error":"Accès interdit"}), 403
+
+    RESEND_API_KEY = os.environ.get("RESEND_API_KEY","")
+    if not RESEND_API_KEY: return jsonify({"error":"RESEND_API_KEY manquant"}), 400
+
+    # Récupère les stats depuis le cache
+    cache_key = f"{creator}_7_c"
+    cached = _stats_cache.get(cache_key)
+    if not cached: return jsonify({"error":"Lance d'abord les stats (7j)"}), 425
+
+    data = cached[1]
+    stats = data.get("stats", {})
+
+    # Calcule KPIs
+    total_views = sum(p.get("vues",0) or 0 for pl in stats.values() for p in pl)
+    total_posts = sum(len(pl) for pl in stats.values())
+    total_likes = sum(p.get("likes",0) or 0 for pl in stats.values() for p in pl)
+    eng = round(total_likes / total_views * 100, 1) if total_views > 0 else 0
+
+    # Top post
+    all_posts = [p for pl in stats.values() for p in pl]
+    top = max(all_posts, key=lambda x: x.get("vues",0) or 0) if all_posts else {}
+
+    def _fmt(n):
+        if n >= 1_000_000: return f"{n/1_000_000:.1f}M"
+        if n >= 1_000: return f"{n/1_000:.1f}K"
+        return str(int(n))
+
+    html = f"""
+    <div style="font-family:sans-serif;max-width:500px;margin:0 auto;background:#0f0f17;color:#e8e8f0;padding:24px;border-radius:16px">
+      <h1 style="font-size:20px;margin-bottom:4px">📊 Résumé hebdo — {creator}</h1>
+      <p style="color:#6b6b80;font-size:13px;margin-top:0">Semaine du {dt.date.today() - dt.timedelta(days=7)} au {dt.date.today()}</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:20px 0">
+        <div style="background:#1a1a2e;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#7c6aff">{_fmt(total_views)}</div>
+          <div style="font-size:11px;color:#6b6b80;margin-top:4px">Vues</div>
+        </div>
+        <div style="background:#1a1a2e;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#6affd4">{total_posts}</div>
+          <div style="font-size:11px;color:#6b6b80;margin-top:4px">Posts</div>
+        </div>
+        <div style="background:#1a1a2e;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#ff6aad">{eng}%</div>
+          <div style="font-size:11px;color:#6b6b80;margin-top:4px">Engagement</div>
+        </div>
+      </div>
+
+      {"<div style='background:#1a1a2e;border-radius:10px;padding:14px;margin-bottom:16px'><div style='font-size:11px;color:#6b6b80;margin-bottom:4px'>🏆 Meilleur post</div><div style='font-size:13px;font-weight:600'>" + (top.get('titre','—') or '—')[:60] + "</div><div style='font-size:12px;color:#7c6aff;margin-top:4px'>" + _fmt(top.get('vues',0)) + " vues</div></div>" if top else ""}
+
+      <a href="{os.environ.get('APP_URL','https://content-tracker.onrender.com')}"
+         style="display:block;background:#7c6aff;color:white;text-align:center;padding:12px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px">
+        Voir le tableau de bord →
+      </a>
+      <p style="font-size:11px;color:#6b6b80;text-align:center;margin-top:16px">Content Tracker · Résumé automatique hebdomadaire</p>
+    </div>"""
+
+    # Trouve l'email du creator
+    users = load_users()
+    user_email = next((u["email"] for u in users if u.get("creator_name") == creator), None)
+    if not user_email: return jsonify({"error":"Email créateur introuvable"}), 404
+
+    try:
+        import urllib.request, json as _json
+        payload = _json.dumps({
+            "from": "Content Tracker <noreply@resend.dev>",
+            "to": [user_email],
+            "subject": f"📊 Résumé hebdo {creator} — {_fmt(total_views)} vues cette semaine",
+            "html": html,
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={"Authorization": f"Bearer {RESEND_API_KEY}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            result = _json.loads(r.read())
+        return jsonify({"success": True, "id": result.get("id")})
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 500
+
+
 @app.route("/api/import/csv", methods=["POST"])
 @login_required
 def import_csv():
