@@ -1,11 +1,29 @@
 """
-ai_coach.py — Suggestions IA basées sur les top posts (OpenAI)
+ai_coach.py — Suggestions IA basées sur les top posts
+Supporte OpenAI ET Groq (gratuit).
+
+Render — ajouter UNE des deux variables :
+  GROQ_API_KEY   → gratuit sur console.groq.com  (prioritaire)
+  OPENAI_API_KEY → payant sur platform.openai.com
 """
 from __future__ import annotations
 import os
 import json
 
+GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+# Sélection automatique du provider
+if GROQ_API_KEY:
+    _API_URL = "https://api.groq.com/openai/v1/chat/completions"
+    _API_KEY = GROQ_API_KEY
+    _MODEL   = "llama-3.3-70b-versatile"
+elif OPENAI_API_KEY:
+    _API_URL = "https://api.openai.com/v1/chat/completions"
+    _API_KEY = OPENAI_API_KEY
+    _MODEL   = "gpt-4o-mini"
+else:
+    _API_URL = _API_KEY = _MODEL = ""
 
 
 def _fmt(n):
@@ -22,8 +40,8 @@ def generate_suggestions(stats_cur: dict, creator: str = "") -> dict:
     - Le format optimal
     - L'accroche type
     """
-    if not OPENAI_API_KEY:
-        return {"error": "OPENAI_API_KEY manquant dans les variables d'environnement Render"}
+    if not _API_KEY:
+        return {"error": "Ajoute GROQ_API_KEY (gratuit : console.groq.com) ou OPENAI_API_KEY dans les variables Render"}
 
     # Collecte tous les posts
     all_posts = []
@@ -86,19 +104,21 @@ Analyse ces données et génère une réponse JSON structurée UNIQUEMENT (pas d
 
     try:
         import urllib.request
-        body = json.dumps({
-            "model":       "gpt-4o-mini",
+        payload = {
+            "model":       _MODEL,
             "messages":    [{"role": "user", "content": prompt}],
             "temperature": 0.7,
             "max_tokens":  800,
-            "response_format": {"type": "json_object"},
-        }).encode()
+        }
+        # response_format json_object : supporté par OpenAI + Groq llama-3.3
+        payload["response_format"] = {"type": "json_object"}
+        body = json.dumps(payload).encode()
 
         req = urllib.request.Request(
-            "https://api.openai.com/v1/chat/completions",
+            _API_URL,
             data=body,
             headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Authorization": f"Bearer {_API_KEY}",
                 "Content-Type":  "application/json",
             },
             method="POST",

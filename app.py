@@ -1306,23 +1306,51 @@ def sync_status(job_id):
 @app.route("/api/stats/<creator>/history", methods=["GET"])
 @login_required
 def get_creator_history(creator):
-    """Retourne l'historique stocké (posts + résumé mensuel)."""
+    """Retourne l'historique stocké, avec filtre optionnel by date range."""
     if not can_access_creator(creator):
         return jsonify({"error": "Accès interdit"}), 403
 
     from history_store import get_history, get_history_summary, get_monthly_breakdown
 
-    days    = int(request.args.get("days", 365))
+    days      = int(request.args.get("days", 365))
+    from_date = request.args.get("from_date")  # YYYY-MM-DD
+    to_date   = request.args.get("to_date")    # YYYY-MM-DD
+
+    # Si from_date/to_date fournis, calcule days depuis from_date
+    if from_date and to_date:
+        try:
+            _from = dt.date.fromisoformat(from_date)
+            _to   = dt.date.fromisoformat(to_date)
+            days  = (_to - _from).days + 1
+        except Exception:
+            pass
+
     rows    = get_history(creator, days=days)
     summary = get_history_summary(creator)
     monthly = get_monthly_breakdown(creator)
 
+    # Filtre par plage de dates si demandé
+    if from_date:
+        rows = [r for r in rows if (r.get("date") or "") >= from_date]
+    if to_date:
+        rows = [r for r in rows if (r.get("date") or "") <= to_date]
+
+    # Regroupe par plateforme (même format que /api/stats/<creator>)
+    stats_by_platform: dict = {}
+    for row in rows:
+        plat = row.get("plateforme") or "Autre"
+        stats_by_platform.setdefault(plat, []).append(row)
+
     return jsonify({
-        "creator":  creator,
-        "history":  rows,
-        "summary":  summary,
-        "monthly":  monthly,
-        "days":     days,
+        "creator":           creator,
+        "history":           rows,
+        "stats_by_platform": stats_by_platform,
+        "total":             len(rows),
+        "summary":           summary,
+        "monthly":           monthly,
+        "days":              days,
+        "from_date":         from_date,
+        "to_date":           to_date,
     })
 
 
@@ -1364,6 +1392,16 @@ def manifest():
 @app.route("/sw.js")
 def service_worker():
     return send_file("sw.js", mimetype="application/javascript")
+
+
+@app.route("/icon-192.png")
+def icon_192():
+    return send_file("icon-192.png", mimetype="image/png")
+
+
+@app.route("/icon-512.png")
+def icon_512():
+    return send_file("icon-512.png", mimetype="image/png")
 
 
 

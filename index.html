@@ -271,6 +271,47 @@ if ('serviceWorker' in navigator) {
   .platform-pill[data-p="Facebook"].active   { background: var(--fb); }
   .platform-pill[data-p="Snapchat"].active   { background: #e6d800; color: #000; }
 
+  /* ── ACCOUNT SELECTOR (top of stats) ─────── */
+  .account-selector-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .account-pill {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px; font-weight: 500;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--muted);
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .account-pill.active { background: var(--accent); color: #fff; border-color: transparent; }
+  .account-pill[data-p="Instagram"].active { background: var(--ig); }
+  .account-pill[data-p="TikTok"].active    { background: #333; }
+  .account-pill[data-p="YouTube"].active   { background: var(--yt); }
+  .account-pill[data-p="Facebook"].active  { background: var(--fb); }
+  .account-pill[data-p="Snapchat"].active  { background: #e6d800; color: #000; }
+
+  /* ── CUSTOM DATE RANGE ────────────────────── */
+  .date-range-row {
+    display: flex; gap: 8px; align-items: center;
+    flex-wrap: wrap; margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+  }
+  .date-input {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    flex: 1; min-width: 120px;
+    color-scheme: dark;
+  }
+
   /* Post rows */
   .post-list { display: flex; flex-direction: column; gap: 10px; }
 
@@ -786,12 +827,24 @@ if ('serviceWorker' in navigator) {
       </select>
     </div>
 
+    <!-- Sélecteur de compte (toutes plateformes + par compte) -->
+    <div class="account-selector-row" id="account-selector-row"></div>
+
     <!-- Sélecteur de période -->
     <div class="period-row">
-      <button class="period-btn active" data-days="7"  onclick="setPeriod(7)">7 jours</button>
-      <button class="period-btn"        data-days="14" onclick="setPeriod(14)">14 jours</button>
-      <button class="period-btn"        data-days="30" onclick="setPeriod(30)">30 jours</button>
-      <button class="period-btn"        data-days="90" onclick="setPeriod(90)">90 jours</button>
+      <button class="period-btn active" data-days="7"  onclick="setPeriod(7)">7j</button>
+      <button class="period-btn"        data-days="14" onclick="setPeriod(14)">14j</button>
+      <button class="period-btn"        data-days="30" onclick="setPeriod(30)">30j</button>
+      <button class="period-btn"        data-days="90" onclick="setPeriod(90)">90j</button>
+      <button class="period-btn" id="period-custom-btn" onclick="toggleCustomRange()">📅 Perso.</button>
+    </div>
+
+    <!-- Plage personnalisée (cachée par défaut) -->
+    <div class="date-range-row" id="custom-range-row" style="display:none">
+      <input type="date" id="date-from" class="date-input" style="max-width:150px">
+      <span style="color:var(--muted);font-size:14px;flex-shrink:0">→</span>
+      <input type="date" id="date-to"   class="date-input" style="max-width:150px">
+      <button class="sort-btn" onclick="applyCustomRange()" style="white-space:nowrap;flex-shrink:0">✓ Appliquer</button>
     </div>
 
     <div id="stats-debug" style="display:none;background:rgba(255,85,85,.08);border:1px solid rgba(255,85,85,.2);border-radius:10px;padding:10px 14px;font-size:12px;color:#ff8888;line-height:1.8;margin-bottom:12px"></div>
@@ -1491,6 +1544,10 @@ if ('serviceWorker' in navigator) {
     let currentSort  = 'date';
     let sortAsc      = false;
     let currentPosts = [];
+    let currentPlatformFilter = null; // null = Tout (toutes plateformes)
+    let isCustomRange  = false;
+    let customFromDate = null;
+    let customToDate   = null;
 
 
     // ══════════════════════════════════════════════
@@ -1898,12 +1955,84 @@ if ('serviceWorker' in navigator) {
 
     function setPeriod(days) {
       currentDays = days;
+      isCustomRange = false;
+      document.getElementById('custom-range-row').style.display = 'none';
       document.querySelectorAll('.period-btn').forEach(b => {
         b.classList.toggle('active', parseInt(b.dataset.days) === days);
       });
+      document.getElementById('period-custom-btn').classList.remove('active');
       const sub = document.getElementById('stats-period-sub');
       if (sub) sub.textContent = days + ' derniers jours';
       loadStats();
+    }
+
+    // ── Plage personnalisée ──────────────────────────────────
+    function toggleCustomRange() {
+      isCustomRange = !isCustomRange;
+      const row = document.getElementById('custom-range-row');
+      const btn = document.getElementById('period-custom-btn');
+      if (row) row.style.display = isCustomRange ? 'flex' : 'none';
+      if (btn) btn.classList.toggle('active', isCustomRange);
+      if (isCustomRange) {
+        const today = new Date().toISOString().slice(0, 10);
+        const sixMo  = new Date(Date.now() - 180 * 864e5).toISOString().slice(0, 10);
+        const dtFrom = document.getElementById('date-from');
+        const dtTo   = document.getElementById('date-to');
+        if (dtFrom && !dtFrom.value) dtFrom.value = sixMo;
+        if (dtTo) { dtTo.max = today; if (!dtTo.value) dtTo.value = today; }
+        // Désactive les boutons période rapides
+        document.querySelectorAll('.period-btn[data-days]').forEach(b => b.classList.remove('active'));
+      }
+    }
+
+    async function applyCustomRange() {
+      const from = document.getElementById('date-from').value;
+      const to   = document.getElementById('date-to').value;
+      if (!from || !to || from > to) { toast('Dates invalides', 'error'); return; }
+      const today    = new Date().toISOString().slice(0, 10);
+      const diffDays = Math.ceil((new Date(to) - new Date(from)) / 864e5);
+      if (diffDays > 366) { toast('Maximum 1 an', 'error'); return; }
+
+      customFromDate = from;
+      customToDate   = to;
+      const sub = document.getElementById('stats-period-sub');
+      if (sub) sub.textContent = `${from} → ${to}`;
+      document.querySelectorAll('.period-btn[data-days]').forEach(b => b.classList.remove('active'));
+      document.getElementById('period-custom-btn').classList.add('active');
+
+      if (diffDays <= 90 && to === today) {
+        // Plage courte jusqu'à aujourd'hui → API live
+        currentDays = diffDays || 1;
+        loadStats();
+      } else {
+        // Plage longue ou ancienne → historique SQLite
+        await loadStatsFromHistory(from, to);
+      }
+    }
+
+    async function loadStatsFromHistory(fromDate, toDate) {
+      if (!viewedCreator) return;
+      showStatsSkeleton();
+      try {
+        const url  = `${API}/api/stats/${encodeURIComponent(viewedCreator)}/history` +
+                     `?from_date=${fromDate}&to_date=${toDate}`;
+        const resp = await fetch(url, { credentials: 'include' });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Erreur historique');
+
+        allStats  = data.stats_by_platform || {};
+        prevStats = {};
+        currentPlatformFilter = null; // reset filtre
+        renderPlatformPills();
+        renderSummary();
+        renderPosts();
+        updateLastUpdated();
+        const total = data.total || Object.values(allStats).reduce((s, pl) => s + pl.length, 0);
+        toast(`${total} posts chargés (${fromDate} → ${toDate})`, 'success');
+      } catch(e) {
+        toast('Erreur historique : ' + e.message, 'error');
+        allStats = {}; renderSummary(); renderPosts();
+      }
     }
 
     function setSort(field) {
@@ -1982,8 +2111,14 @@ if ('serviceWorker' in navigator) {
 
     // 🔢 Stats globales
     function renderSummary() {
-      const cur  = calcKpis(allStats);
-      const prev = calcKpis(prevStats);
+      const statsFiltered = currentPlatformFilter
+        ? { [currentPlatformFilter]: allStats[currentPlatformFilter] || [] }
+        : allStats;
+      const prevFiltered = currentPlatformFilter
+        ? { [currentPlatformFilter]: prevStats[currentPlatformFilter] || [] }
+        : prevStats;
+      const cur  = calcKpis(statsFiltered);
+      const prev = calcKpis(prevFiltered);
 
       const { totalViews, totalPosts, totalLikes, totalComments,
               avgEng, avgViews, totalFollowers, bestPost } = cur;
@@ -1996,6 +2131,15 @@ if ('serviceWorker' in navigator) {
       setKpi('kpi-likes',     totalLikes,  totalLikes ? fmt(totalLikes) : '—',        prev.totalLikes);
       document.getElementById('kpi-comments-sub').textContent =
         totalComments ? fmt(totalComments) + ' commentaires' : '0 commentaires';
+      // Sous-titre vues selon filtre plateforme
+      const viewsSub = document.getElementById('kpi-views-sub');
+      if (viewsSub) viewsSub.textContent = currentPlatformFilter ? currentPlatformFilter : 'toutes plateformes';
+      // Sous-titre posts
+      const postsSub = document.getElementById('kpi-posts-sub');
+      const platCount = Object.keys(allStats).filter(p => allStats[p]?.length).length;
+      if (postsSub) postsSub.textContent = currentPlatformFilter
+        ? `sur ${currentPlatformFilter}`
+        : (platCount > 1 ? `${platCount} plateformes` : 'sur la période');
 
       // Meilleure vidéo
       const card = document.getElementById('best-video-card');
@@ -2017,42 +2161,75 @@ if ('serviceWorker' in navigator) {
     }
 
 
-    // 📱 Boutons plateformes
+    // 📱 Sélecteur de compte (top) + plateformes
     function renderPlatformPills() {
-      const container = document.getElementById('platform-pills');
-      container.innerHTML = '';
-
       const platforms = Object.keys(allStats).filter(p => allStats[p]?.length);
+
+      // ── Top account selector ──
+      const accRow = document.getElementById('account-selector-row');
+      if (accRow) {
+        accRow.innerHTML = '';
+
+        // "Tout" pill
+        const tout = document.createElement('div');
+        tout.className = 'account-pill' + (!currentPlatformFilter ? ' active' : '');
+        tout.dataset.filter = 'tout';
+        tout.textContent = '🌐 Tout';
+        tout.onclick = () => setAccountFilter(null);
+        accRow.appendChild(tout);
+
+        platforms.forEach(p => {
+          const pill = document.createElement('div');
+          pill.className = 'account-pill' + (currentPlatformFilter === p ? ' active' : '');
+          pill.dataset.filter = p;
+          pill.dataset.p = p;
+          const acc = allAccounts[p];
+          pill.textContent = acc?.name
+            ? `${platformEmoji(p)} ${acc.name}`
+            : `${platformEmoji(p)} ${p}`;
+          pill.onclick = () => setAccountFilter(p);
+          accRow.appendChild(pill);
+        });
+
+        // Si la plateforme filtrée n'est plus dispo → reset
+        if (currentPlatformFilter && !platforms.includes(currentPlatformFilter)) {
+          currentPlatformFilter = null;
+        }
+      }
+
+      // ── Legacy card pills (vide — top selector gère tout) ──
+      const container = document.getElementById('platform-pills');
+      if (container) container.innerHTML = '';
 
       if (!platforms.length) {
         document.getElementById('post-list').innerHTML = '<div class="empty">Aucune donnée</div>';
         return;
       }
 
-      platforms.forEach((p, i) => {
-        const pill = document.createElement('div');
-        pill.className = 'platform-pill' + (i === 0 ? ' active' : '');
-        pill.dataset.p = p;
-        pill.textContent = platformEmoji(p) + ' ' + p;
-        pill.onclick = () => {
-          container.querySelectorAll('.platform-pill').forEach(el => el.classList.remove('active'));
-          pill.classList.add('active');
-          currentPlatform = p;
-          renderAccountBadge();
-          renderPosts();
-        };
-        container.appendChild(pill);
-      });
+      // currentPlatform = première dispo (compat renderPosts)
+      if (!currentPlatformFilter) currentPlatform = platforms[0];
+      else currentPlatform = currentPlatformFilter;
 
-      currentPlatform = platforms[0];
       renderAccountBadge();
+    }
+
+    // Sélectionne un compte (affecte KPIs + posts)
+    function setAccountFilter(platform) {
+      currentPlatformFilter = platform;
+      currentPlatform = platform || Object.keys(allStats).find(p => allStats[p]?.length) || null;
+      document.querySelectorAll('#account-selector-row .account-pill').forEach(el => {
+        el.classList.toggle('active', el.dataset.filter === (platform || 'tout'));
+      });
+      renderAccountBadge();
+      renderSummary();
+      renderPosts();
     }
 
     function renderAccountBadge() {
       const el = document.getElementById('account-badge');
       if (!el) return;
-      const acc = allAccounts[currentPlatform];
-      if (acc && acc.name) {
+      const acc = allAccounts[currentPlatformFilter];
+      if (currentPlatformFilter && acc && acc.name) {
         el.textContent = '📺 ' + acc.name;
         el.style.display = 'inline-block';
       } else {
@@ -2073,15 +2250,30 @@ if ('serviceWorker' in navigator) {
     // 📊 Liste des posts
     function renderPosts() {
       const list = document.getElementById('post-list');
-      if (!currentPlatform) { list.innerHTML = '<div class="empty">Aucune donnée</div>'; return; }
+      const pColors = {
+        Instagram: 'var(--ig)', YouTube: 'var(--yt)',
+        Facebook:  'var(--fb)', TikTok:  '#69c9d0', Snapchat: 'var(--snap)'
+      };
 
-      let posts = [...(allStats[currentPlatform] || [])];
-      if (!posts.length) { list.innerHTML = '<div class="empty">Aucun post</div>'; return; }
+      // Collecte posts selon filtre plateforme
+      let posts = [];
+      if (currentPlatformFilter) {
+        (allStats[currentPlatformFilter] || []).forEach(p =>
+          posts.push({ ...p, _dot: pColors[currentPlatformFilter] || 'var(--accent)' })
+        );
+      } else {
+        // Tout : toutes plateformes combinées
+        for (const [plat, platPosts] of Object.entries(allStats)) {
+          platPosts.forEach(p => posts.push({ ...p, _dot: pColors[plat] || 'var(--accent)' }));
+        }
+      }
+
+      if (!posts.length) { list.innerHTML = '<div class="empty">Aucune donnée</div>'; return; }
 
       // Sort
       posts.sort((a, b) => {
         let va, vb;
-        if (currentSort === 'date')  { va = a.date  || ''; vb = b.date  || ''; }
+        if (currentSort === 'date')       { va = a.date  || ''; vb = b.date  || ''; }
         else if (currentSort === 'vues')  { va = a.vues  || 0;  vb = b.vues  || 0; }
         else if (currentSort === 'likes') { va = a.likes || 0;  vb = b.likes || 0; }
         else if (currentSort === 'eng')   {
@@ -2091,12 +2283,6 @@ if ('serviceWorker' in navigator) {
         return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
       });
       currentPosts = posts;
-
-      const platformColors = {
-        Instagram: 'var(--ig)', YouTube: 'var(--yt)',
-        Facebook:  'var(--fb)', TikTok:  '#69c9d0', Snapchat: 'var(--snap)'
-      };
-      const dotColor = platformColors[currentPlatform] || 'var(--accent)';
 
       // Calcule la moyenne de vues pour badge "above avg"
       const avgVuesPlat = posts.length ? posts.reduce((s, p) => s + (p.vues || 0), 0) / posts.length : 0;
@@ -2110,11 +2296,16 @@ if ('serviceWorker' in navigator) {
           : p.titre;
         const aboveAvg = avgVuesPlat > 0 && (p.vues || 0) >= avgVuesPlat * 1.5;
         const aboveTag = aboveAvg ? `<span style="font-size:10px;background:rgba(61,220,132,.15);color:var(--green);padding:1px 6px;border-radius:10px;margin-left:5px">🔥 top</span>` : '';
+        const dotColor = p._dot || 'var(--accent)';
+        // Si vue globale, affiche badge plateforme
+        const platBadge = !currentPlatformFilter && p.plateforme
+          ? `<span style="font-size:10px;color:var(--muted);margin-left:4px">${platformEmoji(p.plateforme)}</span>`
+          : '';
         return `
       <div class="post-row" style="cursor:pointer" onclick="openDrawer(${i})">
         <div class="post-dot" style="background:${dotColor}"></div>
         <div class="post-info" style="flex:1;min-width:0">
-          <div class="post-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titre}${aboveTag}</div>
+          <div class="post-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${titre}${aboveTag}${platBadge}</div>
           <div class="post-meta">${p.date || ''} · ${fmt(p.vues)} vues · ${fmt(p.likes)} ❤️</div>
           <div class="post-stats">
             <span class="post-stat">💬 ${fmt(p.commentaires || 0)}</span>
@@ -2719,6 +2910,7 @@ if ('serviceWorker' in navigator) {
     }
 
     function _allPosts() {
+      if (currentPlatformFilter) return [...(allStats[currentPlatformFilter] || [])];
       const posts = [];
       for (const ps of Object.values(allStats)) posts.push(...ps);
       return posts;
@@ -3008,6 +3200,9 @@ if ('serviceWorker' in navigator) {
     function renderPlatformDonut() {
       const card = document.getElementById('donut-card');
       if (!card) return;
+
+      // Pas de donut si filtre mono-plateforme
+      if (currentPlatformFilter) { card.style.display = 'none'; return; }
 
       const plats = Object.keys(allStats).filter(p => allStats[p]?.length);
       if (plats.length < 2) { card.style.display = 'none'; return; }
