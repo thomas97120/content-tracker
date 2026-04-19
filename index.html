@@ -4744,34 +4744,39 @@ if ('serviceWorker' in navigator) {
       const content = document.getElementById('revenue-content');
       if (!card || !content) return;
 
-      // CPM net créateur (après part plateforme) — valeurs réalistes 2024-2025
-      // YouTube : $1.5 RPM net (55% de ~$2.7 CPM annonceur moyen)
-      // TikTok  : $0.02-0.05 Creator Fund (très bas)
-      // Instagram Reels : pas de paiement direct → valeur sponsoring estimée $0.5/1000
-      // Facebook : monetisation variable → $0.3/1000 net estimé
-      const CPM = { YouTube: 1.5, TikTok: 0.04, Instagram: 0.5, Facebook: 0.3, Snapchat: 0 };
-
-      // Pour Reels/Shorts : TikTok paie via Creator Fund (très peu)
-      // Les Reels Instagram n'ont pas de paiement CPM standard hors bonus program
-      const FORMAT_OVERRIDE = {}; // futur : Short YouTube = différent CPM
+      // CPM réels par format (2025) — basés sur données Creator Fund/AdSense réelles
+      // YouTube Shorts  : ~$0.025/K (très bas, pool partagé)
+      // YouTube Video   : ~$1.20/K  (long-form monétisé)
+      // TikTok          : ~$0.010/K (Creator Rewards Program)
+      // Instagram Reels : pas de paiement direct — estimation sponsoring $0.05/K
+      // Facebook        : ~$0.10/K  (In-Stream Ads)
+      const CPM_SHORT = { YouTube: 0.025, TikTok: 0.010, Instagram: 0.05, Facebook: 0.10, Snapchat: 0 };
+      const CPM_VIDEO = { YouTube: 1.20,  TikTok: 0.010, Instagram: 0.05, Facebook: 0.10, Snapchat: 0 };
 
       let total = 0;
       const details = [];
 
       for (const [plat, posts] of Object.entries(allStats)) {
         if (!posts?.length) continue;
-        const rate = CPM[plat];
-        if (rate === undefined || rate === null) continue;
-        const views = posts.reduce((s, p) => s + (p.vues || 0), 0);
-        const rev = views * rate / 1000;
+        let rev = 0;
+        let views = 0;
+        let shortViews = 0, videoViews = 0;
+        for (const p of posts) {
+          const v = p.vues || 0;
+          views += v;
+          const fmt_p = (p.format || '').toLowerCase();
+          const isShort = fmt_p.includes('short') || fmt_p.includes('reel') || fmt_p.includes('tiktok') || fmt_p.includes('court') || fmt_p.includes('vidéo courte');
+          if (isShort) shortViews += v; else videoViews += v;
+        }
+        const rShort = CPM_SHORT[plat] ?? 0;
+        const rVideo = CPM_VIDEO[plat] ?? 0;
+        rev = (shortViews * rShort + videoViews * rVideo) / 1000;
         total += rev;
-        if (views > 0) details.push({ plat, views, rev, rate });
+        const blendedRate = views > 0 ? rev / views * 1000 : 0;
+        if (views > 0) details.push({ plat, views, rev, shortViews, videoViews, blendedRate });
       }
 
-      if (total === 0) {
-        card.style.display = 'none';
-        return;
-      }
+      if (total === 0) { card.style.display = 'none'; return; }
       card.style.display = '';
 
       const fmtMoney = v => v >= 1000 ? `$${(v/1000).toFixed(1)}K` : `$${v.toFixed(2)}`;
@@ -4780,14 +4785,19 @@ if ('serviceWorker' in navigator) {
         <div style="font-size:28px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace;margin-bottom:2px">${fmtMoney(total)}</div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:14px">estimation revenus nets créateur</div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          ${details.map(d => `
+          ${details.map(d => {
+            const detail = d.shortViews > 0 && d.videoViews > 0
+              ? `${fmt(d.shortViews)} Shorts + ${fmt(d.videoViews)} vidéos`
+              : d.shortViews > 0 ? `${fmt(d.views)} Shorts/Reels` : `${fmt(d.views)} vidéos`;
+            return `
             <div style="display:flex;align-items:center;justify-content:space-between">
-              <span style="font-size:13px;color:var(--muted)">${d.plat} <span style="font-size:11px">(${fmt(d.views)} vues · $${d.rate}/K)</span></span>
+              <span style="font-size:12px;color:var(--muted)">${d.plat} <span style="font-size:10px">(${detail} · $${d.blendedRate.toFixed(3)}/K)</span></span>
               <span style="font-size:13px;font-weight:600;color:var(--green);font-family:'DM Mono',monospace">${fmtMoney(d.rev)}</span>
-            </div>`).join('')}
+            </div>`;
+          }).join('')}
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">
-          ⚠️ Estimation indicative. YouTube = RPM net ~$1.5/K. Instagram Reels & TikTok = valeur très variable selon niche et pays. Les chiffres réels dépendent de ta monétisation activée.
+          ⚠️ Estimation. Shorts/Reels/TikTok ≈ $0.01–0.025/K · YouTube longform ≈ $1.2/K. Instagram ne paie pas de CPM direct. Chiffres réels dans YouTube Studio → Revenus.
         </div>`;
     }
 
