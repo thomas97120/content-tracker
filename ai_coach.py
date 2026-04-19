@@ -19,7 +19,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 if OPENROUTER_API_KEY:
     _API_URL = "https://openrouter.ai/api/v1/chat/completions"
     _API_KEY = OPENROUTER_API_KEY
-    _MODEL   = "google/gemma-2-9b-it:free"
+    _MODEL   = "deepseek/deepseek-chat:free"
     _EXTRA_HEADERS = {
         "HTTP-Referer": os.environ.get("APP_URL", "https://content-tracker.onrender.com"),
         "X-Title": "Content Tracker",
