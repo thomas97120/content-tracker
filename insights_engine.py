@@ -420,6 +420,99 @@ def predict_next_post(stats_cur: dict) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────
+#  ANALYSE PAR JOUR DE SEMAINE
+# ─────────────────────────────────────────────────────────────
+
+_DAY_NAMES = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+
+def best_days_analysis(stats_cur: dict) -> list[dict]:
+    """
+    Retourne les performances moyennes par jour de la semaine (0=Lun, 6=Dim).
+    """
+    day_data: dict[int, list] = {i: [] for i in range(7)}
+
+    for posts in stats_cur.values():
+        for p in posts:
+            date_str = p.get("date", "")
+            v = p.get("vues", 0) or 0
+            if not date_str or v == 0:
+                continue
+            try:
+                d = datetime.date.fromisoformat(date_str)
+                day_data[d.weekday()].append(v)
+            except Exception:
+                continue
+
+    result = []
+    max_avg = 1
+    for i in range(7):
+        views_list = day_data[i]
+        avg = round(sum(views_list) / len(views_list)) if views_list else 0
+        if avg > max_avg:
+            max_avg = avg
+        result.append({
+            "day_num":    i,
+            "day_name":   _DAY_NAMES[i],
+            "avg_views":  avg,
+            "posts_count": len(views_list),
+        })
+
+    # Ajoute score relatif (0-100) pour barres
+    for r in result:
+        r["score"] = round(r["avg_views"] / max_avg * 100) if max_avg > 1 else 0
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────
+#  ANALYSE PAR FORMAT
+# ─────────────────────────────────────────────────────────────
+
+def format_breakdown(stats_cur: dict) -> list[dict]:
+    """
+    Retourne les performances moyennes par format de contenu.
+    """
+    fmt_data: dict[str, dict] = {}
+
+    for posts in stats_cur.values():
+        for p in posts:
+            fmt = (p.get("format") or "Autre").strip()
+            v   = p.get("vues", 0) or 0
+            l   = p.get("likes", 0) or 0
+            c   = p.get("commentaires", 0) or 0
+            if fmt not in fmt_data:
+                fmt_data[fmt] = {"views": [], "engagement": []}
+            fmt_data[fmt]["views"].append(v)
+            eng = (l + c) / v * 100 if v > 0 else 0
+            fmt_data[fmt]["engagement"].append(eng)
+
+    result = []
+    for fmt, d in fmt_data.items():
+        views_list = d["views"]
+        eng_list   = d["engagement"]
+        if not views_list:
+            continue
+        avg_v = round(sum(views_list) / len(views_list))
+        avg_e = round(sum(eng_list) / len(eng_list), 1)
+        result.append({
+            "format":       fmt,
+            "avg_views":    avg_v,
+            "total_views":  sum(views_list),
+            "avg_eng_pct":  avg_e,
+            "posts_count":  len(views_list),
+        })
+
+    result.sort(key=lambda x: x["avg_views"], reverse=True)
+
+    # Score relatif
+    max_v = result[0]["avg_views"] if result else 1
+    for r in result:
+        r["score"] = round(r["avg_views"] / max(max_v, 1) * 100)
+
+    return result
+
+
+# ─────────────────────────────────────────────────────────────
 #  ENTRY POINT
 # ─────────────────────────────────────────────────────────────
 
@@ -511,4 +604,6 @@ def analyze(stats_cur: dict, stats_prev: dict, days: int) -> dict:
         "recommendations": generate_recommendations(data, score_data["score"]),
         "kpis":            cur,
         "prediction":      predict_next_post(stats_cur),
+        "best_days":       best_days_analysis(stats_cur),
+        "format_breakdown": format_breakdown(stats_cur),
     }

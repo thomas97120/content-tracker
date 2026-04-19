@@ -997,6 +997,49 @@ if ('serviceWorker' in navigator) {
       <div id="pred-content"></div>
     </div>
 
+    <!-- Meilleur jour pour poster -->
+    <div class="card" id="best-days-card" style="display:none">
+      <div class="card-title">📅 Meilleur jour pour poster</div>
+      <div id="best-days-content"></div>
+    </div>
+
+    <!-- Performance par format -->
+    <div class="card" id="format-breakdown-card" style="display:none">
+      <div class="card-title">🎞 Performance par format</div>
+      <div id="format-breakdown-content"></div>
+    </div>
+
+    <!-- Onboarding — aucune donnée -->
+    <div class="card" id="onboarding-card" style="display:none">
+      <div class="card-title">👋 Bienvenue sur Content Tracker</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">
+        Aucune donnée pour l'instant. 3 façons d'alimenter ton tableau de bord :
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="background:var(--surface);border-radius:12px;padding:14px;display:flex;align-items:flex-start;gap:12px">
+          <div style="font-size:22px;flex-shrink:0">📥</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px">Importe un CSV</div>
+            <div style="font-size:12px;color:var(--muted)">YouTube Studio, TikTok, Meta Business Suite → exporte en CSV → importe ici via <strong>Saisie → Import CSV</strong>.</div>
+          </div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:14px;display:flex;align-items:flex-start;gap:12px">
+          <div style="font-size:22px;flex-shrink:0">🔗</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px">Connecte tes APIs</div>
+            <div style="font-size:12px;color:var(--muted)">Instagram & Facebook via Meta Business Suite, YouTube via Google OAuth → <strong>Réglages → Connexions</strong>.</div>
+          </div>
+        </div>
+        <div style="background:var(--surface);border-radius:12px;padding:14px;display:flex;align-items:flex-start;gap:12px">
+          <div style="font-size:22px;flex-shrink:0">✏️</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:3px">Saisis manuellement</div>
+            <div style="font-size:12px;color:var(--muted)">Ajoute des stats post par post via <strong>Saisie → Entrée manuelle</strong>.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Comparaison A vs B -->
     <div class="card" id="compare-card" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -1238,14 +1281,24 @@ if ('serviceWorker' in navigator) {
     <!-- Graphique long terme (vues par mois) -->
     <div class="card" id="history-trend-card" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div class="card-title" style="margin:0">📈 Évolution sur 12 mois</div>
-        <div style="display:flex;gap:6px">
+        <div class="card-title" style="margin:0">📈 Évolution dans le temps</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
           <button class="sort-btn active" id="htrend-views" onclick="setHistoryMetric('views')">Vues</button>
           <button class="sort-btn"        id="htrend-eng"   onclick="setHistoryMetric('eng')">Eng.%</button>
           <button class="sort-btn"        id="htrend-posts" onclick="setHistoryMetric('posts')">Posts</button>
         </div>
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="sort-btn active" id="hgran-month" onclick="setHistoryGranularity('month')">Par mois</button>
+        <button class="sort-btn"        id="hgran-week"  onclick="setHistoryGranularity('week')">Par semaine</button>
+      </div>
       <canvas id="history-trend-chart" height="200"></canvas>
+    </div>
+
+    <!-- Analyse Best Day (depuis historique) -->
+    <div class="card" id="history-bestday-card" style="display:none">
+      <div class="card-title">📅 Meilleur jour (historique complet)</div>
+      <div id="history-bestday-content"></div>
     </div>
 
     <!-- Top posts historiques -->
@@ -1759,6 +1812,7 @@ if ('serviceWorker' in navigator) {
         prevStats   = data.prev_stats || {};
         allAccounts = data.accounts || {};
         renderSummary(); renderPlatformPills(); renderPosts();
+        checkOnboarding();
         toast('Stats à jour ✓', 'success');
         updateLastUpdated();
         loadInsights();
@@ -2045,6 +2099,7 @@ if ('serviceWorker' in navigator) {
       renderSummary();
       renderPlatformPills();
       renderPosts();
+      checkOnboarding();
       updateLastUpdated();
       loadInsights();
     }
@@ -3689,7 +3744,9 @@ if ('serviceWorker' in navigator) {
         if (!resp.ok) return;
         const data = await resp.json();
         renderCoach(data);
-        if (data.prediction) renderPrediction(data.prediction);
+        if (data.prediction)      renderPrediction(data.prediction);
+        if (data.best_days)       renderBestDays(data.best_days);
+        if (data.format_breakdown) renderFormatBreakdown(data.format_breakdown);
       } catch (e) { console.error('Coach error:', e); }
     }
 
@@ -3748,6 +3805,101 @@ if ('serviceWorker' in navigator) {
       });
 
       card.style.display = '';
+    }
+
+    // ══════════════════════════════════════════════
+    // MEILLEUR JOUR POUR POSTER
+    // ══════════════════════════════════════════════
+    function renderBestDays(days) {
+      const card = document.getElementById('best-days-card');
+      const cont = document.getElementById('best-days-content');
+      if (!card || !cont) return;
+
+      const hasDays = days.some(d => d.posts_count > 0);
+      if (!hasDays) { card.style.display = 'none'; return; }
+
+      const best = days.reduce((a, b) => b.avg_views > a.avg_views ? b : a, days[0]);
+
+      cont.innerHTML = `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          Meilleur jour : <strong style="color:var(--accent)">${best.day_name}</strong>
+          — avg ${fmt(best.avg_views)} vues
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${days.map(d => {
+            const isB = d.day_num === best.day_num;
+            const color = isB ? 'var(--accent)' : 'var(--border)';
+            const textColor = isB ? 'var(--text)' : 'var(--muted)';
+            const count = d.posts_count;
+            return `
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:28px;font-size:12px;font-weight:${isB?'700':'400'};color:${textColor};flex-shrink:0">${d.day_name}</div>
+              <div style="flex:1;height:8px;background:var(--surface);border-radius:4px;overflow:hidden">
+                <div style="height:100%;width:${d.score}%;background:${color};border-radius:4px;transition:width 0.6s ease"></div>
+              </div>
+              <div style="width:60px;font-size:11px;color:${textColor};text-align:right;flex-shrink:0">
+                ${count > 0 ? fmt(d.avg_views) : '—'}
+              </div>
+              <div style="width:32px;font-size:10px;color:var(--muted);text-align:right;flex-shrink:0">
+                ${count > 0 ? count+'p' : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:10px">
+          Basé sur ${days.reduce((s,d) => s+d.posts_count, 0)} posts analysés.
+        </div>`;
+
+      card.style.display = '';
+    }
+
+    // ══════════════════════════════════════════════
+    // PERFORMANCE PAR FORMAT
+    // ══════════════════════════════════════════════
+    function renderFormatBreakdown(formats) {
+      const card = document.getElementById('format-breakdown-card');
+      const cont = document.getElementById('format-breakdown-content');
+      if (!card || !cont) return;
+      if (!formats || formats.length < 2) { card.style.display = 'none'; return; }
+
+      const best = formats[0];
+      const colors = ['var(--accent)', '#6affd4', '#ff6aad', '#ffd76a', '#6ab4ff'];
+
+      cont.innerHTML = `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          Format gagnant : <strong style="color:var(--accent)">${best.format}</strong>
+          — avg ${fmt(best.avg_views)} vues · ${best.avg_eng_pct}% eng
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${formats.map((f, i) => {
+            const color = colors[i % colors.length];
+            return `
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <div style="font-size:12px;font-weight:${i===0?'700':'400'};color:${i===0?'var(--text)':'var(--muted)'}">${f.format}</div>
+                <div style="font-size:11px;color:var(--muted)">${f.posts_count} posts · ${f.avg_eng_pct}% eng</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="flex:1;height:8px;background:var(--surface);border-radius:4px;overflow:hidden">
+                  <div style="height:100%;width:${f.score}%;background:${color};border-radius:4px;opacity:${i===0?1:0.6};transition:width 0.6s ease"></div>
+                </div>
+                <div style="width:64px;font-size:11px;color:var(--muted);text-align:right;flex-shrink:0">${fmt(f.avg_views)}</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+
+      card.style.display = '';
+    }
+
+    // ══════════════════════════════════════════════
+    // ONBOARDING VIDE
+    // ══════════════════════════════════════════════
+    function checkOnboarding() {
+      const card = document.getElementById('onboarding-card');
+      if (!card) return;
+      const totalPosts = Object.values(allStats).reduce((s, pl) => s + (pl?.length || 0), 0);
+      card.style.display = totalPosts === 0 ? '' : 'none';
     }
 
     // ══════════════════════════════════════════════
@@ -3915,9 +4067,10 @@ if ('serviceWorker' in navigator) {
     // HISTORIQUE — Sync + Affichage
     // ══════════════════════════════════════════════
 
-    let _historyChart  = null;
-    let _historyMetric = 'views';
-    let _historyData   = null;  // { history, summary, monthly }
+    let _historyChart       = null;
+    let _historyMetric      = 'views';
+    let _historyGranularity = 'month';
+    let _historyData        = null;  // { history, summary, monthly }
 
     async function syncHistory() {
       const btn  = document.getElementById('sync-history-btn');
@@ -3989,6 +4142,7 @@ if ('serviceWorker' in navigator) {
         renderHistorySummary(data);
         renderHistoryTrend(data);
         renderHistoryTop(data);
+        renderHistoryBestDay(data);
       } catch (e) {
         console.error('History load error:', e);
       }
@@ -4031,36 +4185,68 @@ if ('serviceWorker' in navigator) {
       if (_historyData) renderHistoryTrend(_historyData);
     }
 
+    function setHistoryGranularity(gran) {
+      _historyGranularity = gran;
+      ['month','week'].forEach(k => {
+        const b = document.getElementById('hgran-' + k);
+        if (b) b.classList.toggle('active', k === gran);
+      });
+      if (_historyData) renderHistoryTrend(_historyData);
+    }
+
     function renderHistoryTrend(data) {
       const card = document.getElementById('history-trend-card');
       if (!data.monthly?.length) { card.style.display = 'none'; return; }
       card.style.display = '';
 
-      // Aggrège par mois (toutes plateformes)
-      const byMonth = {};
-      for (const r of data.monthly) {
-        if (!byMonth[r.month]) byMonth[r.month] = { views: 0, engSum: 0, engN: 0, posts: 0 };
-        byMonth[r.month].views  += r.total_views || 0;
-        byMonth[r.month].engSum += (r.avg_eng || 0) * (r.posts || 0);
-        byMonth[r.month].engN   += r.posts || 0;
-        byMonth[r.month].posts  += r.posts || 0;
+      // Aggrège par mois ou semaine selon granularité
+      const byPeriod = {};
+
+      if (_historyGranularity === 'week') {
+        // Groupe par semaine ISO (YYYY-Www) depuis data.history (posts individuels)
+        const posts = data.history || [];
+        for (const p of posts) {
+          const d = new Date(p.post_date || p.date || '');
+          if (isNaN(d)) continue;
+          // Calcule semaine ISO
+          const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+          tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
+          const yr  = tmp.getUTCFullYear();
+          const wn  = Math.ceil(((tmp - new Date(Date.UTC(yr,0,1))) / 86400000 + 1) / 7);
+          const key = `${yr}-W${String(wn).padStart(2,'0')}`;
+          if (!byPeriod[key]) byPeriod[key] = { views: 0, engSum: 0, engN: 0, posts: 0 };
+          byPeriod[key].views  += p.views || 0;
+          byPeriod[key].engSum += (p.eng_pct || 0) * 1;
+          byPeriod[key].engN   += 1;
+          byPeriod[key].posts  += 1;
+        }
+      } else {
+        for (const r of data.monthly) {
+          if (!byPeriod[r.month]) byPeriod[r.month] = { views: 0, engSum: 0, engN: 0, posts: 0 };
+          byPeriod[r.month].views  += r.total_views || 0;
+          byPeriod[r.month].engSum += (r.avg_eng || 0) * (r.posts || 0);
+          byPeriod[r.month].engN   += r.posts || 0;
+          byPeriod[r.month].posts  += r.posts || 0;
+        }
       }
 
-      const months = Object.keys(byMonth).sort();
+      const periods = Object.keys(byPeriod).sort();
       const cfg = {
         views: { label: 'Vues',   color: '#7c6aff', bg: 'rgba(124,106,255,0.12)',
-                 fn: m => byMonth[m].views },
+                 fn: k => byPeriod[k].views },
         eng:   { label: 'Eng.%',  color: '#6affd4', bg: 'rgba(106,255,212,0.12)',
-                 fn: m => byMonth[m].engN ? +(byMonth[m].engSum / byMonth[m].engN).toFixed(2) : 0 },
+                 fn: k => byPeriod[k].engN ? +(byPeriod[k].engSum / byPeriod[k].engN).toFixed(2) : 0 },
         posts: { label: 'Posts',  color: '#ff6aad', bg: 'rgba(255,106,173,0.12)',
-                 fn: m => byMonth[m].posts },
+                 fn: k => byPeriod[k].posts },
       }[_historyMetric];
 
-      const values = months.map(cfg.fn);
-      const labels = months.map(m => {
-        const [y, mo] = m.split('-');
+      const values = periods.map(cfg.fn);
+      const labels = periods.map(k => {
+        if (k.includes('W')) return k.replace('-', ' ');  // ex: 2025 W12
+        const [y, mo] = k.split('-');
         return ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'][parseInt(mo)-1] + ' ' + y.slice(2);
       });
+      const months = periods; // alias pour la suite
 
       const canvas = document.getElementById('history-trend-chart');
       if (!canvas) return;
@@ -4120,6 +4306,59 @@ if ('serviceWorker' in navigator) {
       card.style.display = '';
     }
 
+
+    function renderHistoryBestDay(data) {
+      const card = document.getElementById('history-bestday-card');
+      const cont = document.getElementById('history-bestday-content');
+      if (!card || !cont) return;
+
+      const posts = data.history || [];
+      if (posts.length < 5) { card.style.display = 'none'; return; }
+
+      const dayNames = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+      const dayData  = Array.from({length:7}, () => []);
+
+      for (const p of posts) {
+        const v = p.views || 0;
+        if (!p.post_date || v === 0) continue;
+        const d = new Date(p.post_date);
+        if (isNaN(d)) continue;
+        // getDay() = 0 (Sun)..6 (Sat) → convert to 0=Mon..6=Sun
+        const wd = (d.getDay() + 6) % 7;
+        dayData[wd].push(v);
+      }
+
+      const avgs = dayData.map(arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : 0);
+      const maxA  = Math.max(...avgs, 1);
+      const bestI = avgs.indexOf(Math.max(...avgs));
+
+      cont.innerHTML = `
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          Meilleur jour : <strong style="color:var(--accent)">${dayNames[bestI]}</strong>
+          — avg ${fmt(avgs[bestI])} vues · ${posts.length} posts analysés
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${avgs.map((a, i) => {
+            const isB = i === bestI;
+            const score = Math.round(a / maxA * 100);
+            return `
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:28px;font-size:12px;font-weight:${isB?'700':'400'};color:${isB?'var(--text)':'var(--muted)'};flex-shrink:0">${dayNames[i]}</div>
+              <div style="flex:1;height:8px;background:var(--surface);border-radius:4px;overflow:hidden">
+                <div style="height:100%;width:${score}%;background:${isB?'var(--accent)':'var(--border)'};border-radius:4px"></div>
+              </div>
+              <div style="width:64px;font-size:11px;color:${isB?'var(--text)':'var(--muted)'};text-align:right;flex-shrink:0">
+                ${dayData[i].length > 0 ? fmt(a) : '—'}
+              </div>
+              <div style="width:28px;font-size:10px;color:var(--muted);text-align:right;flex-shrink:0">
+                ${dayData[i].length > 0 ? dayData[i].length+'p' : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+
+      card.style.display = '';
+    }
 
     // ══════════════════════════════════════════════
     // IMPORT CSV
