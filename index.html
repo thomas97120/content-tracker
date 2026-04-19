@@ -1872,9 +1872,10 @@
     function setKpi(id, val, formatted, prevVal) {
       const el = document.getElementById(id);
       if (!el) return;
-      const delta = prevVal !== undefined ? ' ' + deltaHTML(val, prevVal) : '';
+      const fmtStr = String(formatted ?? '—');
+      const delta  = prevVal !== undefined ? ' ' + deltaHTML(val, prevVal) : '';
       // Animate numeric KPIs
-      if (typeof val === 'number' && val > 0 && !formatted.includes('%')) {
+      if (typeof val === 'number' && val > 0 && !fmtStr.includes('%')) {
         el.innerHTML = '0' + delta;
         const numEl = document.createElement('span');
         numEl.textContent = '0';
@@ -1887,7 +1888,7 @@
           return String(Math.round(v));
         });
       } else {
-        el.innerHTML = formatted + delta;
+        el.innerHTML = fmtStr + delta;
       }
     }
 
@@ -1902,7 +1903,7 @@
       setKpi('kpi-views',     totalViews,  totalViews ? fmt(totalViews) : '—',       prev.totalViews);
       setKpi('kpi-eng',       avgEng,      avgEng ? avgEng.toFixed(1)+'%' : '—',     prev.avgEng);
       setKpi('kpi-followers', totalFollowers, totalFollowers ? fmt(totalFollowers) : '—', undefined);
-      setKpi('kpi-posts',     totalPosts,  totalPosts || '—',                         prev.totalPosts);
+      setKpi('kpi-posts',     totalPosts,  totalPosts ? String(totalPosts) : '—',     prev.totalPosts);
       setKpi('kpi-avg-views', avgViews,    avgViews ? fmt(Math.round(avgViews)) : '—', prev.avgViews);
       setKpi('kpi-likes',     totalLikes,  totalLikes ? fmt(totalLikes) : '—',        prev.totalLikes);
       document.getElementById('kpi-comments-sub').textContent =
