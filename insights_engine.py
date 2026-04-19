@@ -366,6 +366,60 @@ def generate_recommendations(data: dict, score: int) -> list[dict]:
 
 
 # ─────────────────────────────────────────────────────────────
+#  PRÉDICTION — prochain post
+# ─────────────────────────────────────────────────────────────
+
+def predict_next_post(stats_cur: dict) -> dict:
+    """
+    Prédit les vues du prochain post via moyenne glissante + tendance linéaire.
+    Retourne: predicted_views, trend_pct, confidence, based_on
+    """
+    all_posts = sorted(
+        [p for pl in stats_cur.values() for p in pl if p.get("date") and (p.get("vues") or 0) > 0],
+        key=lambda x: x["date"]
+    )
+    if len(all_posts) < 3:
+        return {"error": "Pas assez de posts pour prédire (minimum 3)"}
+
+    views = [p["vues"] for p in all_posts]
+
+    # Moyenne glissante des 5 derniers
+    recent = views[-5:]
+    avg_recent = sum(recent) / len(recent)
+
+    # Tendance : derniers 3 vs 3 précédents
+    if len(views) >= 6:
+        last3 = sum(views[-3:]) / 3
+        prev3 = sum(views[-6:-3]) / 3
+        trend_pct = (last3 - prev3) / prev3 * 100 if prev3 > 0 else 0
+    else:
+        trend_pct = 0
+
+    # Applique tendance amortie (50%) pour éviter surfit
+    predicted = avg_recent * (1 + (trend_pct / 100) * 0.5)
+    predicted = max(predicted, avg_recent * 0.3)  # plancher 30% de la moyenne
+
+    confidence = "haute" if len(all_posts) >= 10 else "moyenne" if len(all_posts) >= 5 else "faible"
+
+    # Intervalle de confiance simple (±1 écart-type)
+    import math
+    mean = sum(views) / len(views)
+    std  = math.sqrt(sum((v - mean) ** 2 for v in views) / len(views))
+    low  = max(0, round(predicted - std * 0.7))
+    high = round(predicted + std * 0.7)
+
+    return {
+        "predicted_views": round(predicted),
+        "range_low":       low,
+        "range_high":      high,
+        "avg_recent":      round(avg_recent),
+        "trend_pct":       round(trend_pct, 1),
+        "confidence":      confidence,
+        "based_on":        len(all_posts),
+    }
+
+
+# ─────────────────────────────────────────────────────────────
 #  ENTRY POINT
 # ─────────────────────────────────────────────────────────────
 
@@ -456,4 +510,5 @@ def analyze(stats_cur: dict, stats_prev: dict, days: int) -> dict:
         "insights":        generate_insights(data),
         "recommendations": generate_recommendations(data, score_data["score"]),
         "kpis":            cur,
+        "prediction":      predict_next_post(stats_cur),
     }

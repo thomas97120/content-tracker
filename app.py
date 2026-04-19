@@ -1376,6 +1376,70 @@ def export_history():
     })
 
 
+@app.route("/api/admin/consolidated", methods=["GET"])
+@admin_required
+def admin_consolidated():
+    """
+    Vue consolidée : KPIs + score pour tous les créateurs.
+    Utilisé par l'admin pour comparer les créateurs d'un coup d'œil.
+    """
+    from creator_apis import get_creator_apis
+    from collectors import (
+        get_youtube_stats_oauth_creator, get_youtube_stats_apikey,
+        get_instagram_stats, get_facebook_stats, get_tiktok_stats,
+    )
+    from insights_engine import analyze
+
+    days     = int(request.args.get("days", 7))
+    creators = get_all_creators()
+    results  = []
+
+    for creator in creators:
+        try:
+            cache_key = f"{creator}_{days}_c"
+            cached = _stats_cache.get(cache_key)
+            if cached and (time.time() - cached[0]) < CACHE_TTL:
+                data = cached[1]
+            else:
+                data = None
+
+            if data:
+                stats_cur  = data.get("stats", {})
+                stats_prev = data.get("prev_stats", {})
+            else:
+                # Mini-fetch (réutilise le cache si dispo, sinon skip)
+                stats_cur = {}; stats_prev = {}
+
+            insight = analyze(stats_cur, stats_prev, days) if stats_cur else {}
+            kpis    = insight.get("kpis", {})
+            score   = insight.get("score", {})
+
+            results.append({
+                "creator":     creator,
+                "score":       score.get("score", 0),
+                "grade":       score.get("grade", "—"),
+                "label":       score.get("label", "—"),
+                "total_views": kpis.get("total_views", 0),
+                "avg_views":   kpis.get("avg_views", 0),
+                "eng_pct":     kpis.get("eng_pct", 0),
+                "posts":       kpis.get("posts", 0),
+                "followers":   kpis.get("followers", 0),
+            })
+        except Exception as e:
+            results.append({"creator": creator, "error": str(e)[:60]})
+
+    # Tri par score desc
+    results.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+    totals = {
+        "total_views": sum(r.get("total_views", 0) for r in results),
+        "total_posts": sum(r.get("posts", 0) for r in results),
+        "avg_score":   round(sum(r.get("score", 0) for r in results) / len(results)) if results else 0,
+    }
+
+    return jsonify({"creators": results, "totals": totals, "days": days})
+
+
 # ──────────────────────────────────────────────────────────────
 # HEALTH / FRONT
 # ──────────────────────────────────────────────────────────────

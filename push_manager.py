@@ -184,5 +184,22 @@ def check_and_alert(user_email: str, stats_cur: dict, stats_prev: dict, days: in
                 "/"
             ))
 
+    # Alerte : spike — une vidéo explose (3x la moyenne, min 50K vues)
+    all_posts = [p for pl in stats_cur.values() for p in pl]
+    if len(all_posts) >= 3:
+        all_views = [p.get("vues", 0) or 0 for p in all_posts]
+        avg_v = sum(all_views) / len(all_views)
+        for p in sorted(all_posts, key=lambda x: x.get("vues", 0), reverse=True)[:1]:
+            v = p.get("vues", 0) or 0
+            if avg_v > 0 and v >= avg_v * 3 and v >= 50_000:
+                titre = (p.get("titre") or "")[:40] or "Une vidéo"
+                def _fmt_v(n):
+                    return f"{n/1_000_000:.1f}M" if n >= 1_000_000 else f"{n/1_000:.0f}K"
+                alerts.append((
+                    "🚀 Vidéo en train d'exploser !",
+                    f'"{titre}" — {_fmt_v(v)} vues ({v/avg_v:.1f}x la moyenne). Réponds aux commentaires maintenant.',
+                    "/"
+                ))
+
     for title, body, url in alerts[:2]:   # max 2 alertes à la fois
         send_push(user_email, title, body, url)

@@ -697,6 +697,75 @@ if ('serviceWorker' in navigator) {
 @keyframes toastIn  { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 @keyframes toastOut { to   { opacity:0; transform:translateY(10px); } }
 
+/* ── PRÉDICTION ──────────────────────────────── */
+.pred-bar {
+  height: 8px; background: var(--surface);
+  border-radius: 4px; overflow: visible;
+  position: relative; margin: 8px 0;
+}
+.pred-bar-fill {
+  position: absolute; height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 4px;
+}
+.pred-bar-range {
+  position: absolute; height: 100%;
+  background: rgba(124,106,255,.15);
+  border-radius: 4px;
+}
+.pred-value {
+  font-size: 28px; font-weight: 700;
+  font-family: 'DM Mono', monospace;
+  color: var(--accent);
+}
+
+/* ── COMPARAISON A vs B ──────────────────────── */
+.compare-row {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.compare-btn {
+  padding: 5px 12px; border-radius: 20px; font-size: 12px;
+  border: 1px solid var(--border); cursor: pointer;
+  background: var(--surface); color: var(--muted);
+  transition: all .15s;
+}
+.compare-btn.active { background: rgba(124,106,255,.15); color: var(--accent); border-color: var(--accent); }
+.compare-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;
+}
+.compare-col { background: var(--surface); border-radius: var(--r-sm); padding: 10px; }
+.compare-col-label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+.compare-kpi-val { font-size: 18px; font-weight: 700; font-family: 'DM Mono', monospace; }
+.compare-kpi-lbl { font-size: 11px; color: var(--muted); }
+
+/* ── ADMIN CONSOLIDÉ ─────────────────────────── */
+.leaderboard-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.leaderboard-row:last-child { border-bottom: none; }
+.lb-rank { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+.lb-name { font-size: 13px; font-weight: 500; flex: 1; }
+.lb-score { font-size: 18px; font-weight: 700; font-family: 'DM Mono', monospace; }
+.lb-meta  { font-size: 11px; color: var(--muted); }
+
+/* ── @MEDIA PRINT ─────────────────────────────── */
+@media print {
+  .topbar, .nav-bar, .period-row, .account-selector-row,
+  .sort-row, .export-btn, .topbar-refresh, #refresh-btn,
+  #period-custom-btn, #custom-range-row, #pull-indicator,
+  #toast-container, .page:not(#page-stats),
+  #ai-refresh-btn, #coach-tab-recs, #print-btn { display: none !important; }
+  #page-stats { display: block !important; }
+  .page { display: none; }
+  #page-stats { display: block !important; }
+  body, #app { background: #fff !important; color: #111 !important; }
+  .card { border: 1px solid #ddd !important; break-inside: avoid; box-shadow: none !important; }
+  .kpi-value { color: #333 !important; }
+  .kpi-delta { background: transparent !important; }
+  #page-container { overflow: visible !important; }
+}
+
 /* ── PULL-TO-REFRESH ─────────────────────────── */
 #pull-indicator {
   position: fixed; top: 52px; left: 50%; transform: translateX(-50%) translateY(-60px);
@@ -819,12 +888,16 @@ if ('serviceWorker' in navigator) {
         <div class="section-title" id="stats-greeting">Tes stats</div>
         <div class="section-sub" id="stats-period-sub">7 derniers jours</div>
       </div>
-      <select id="admin-creator-select" class="hidden"
-              style="background:var(--card);border:1px solid var(--border);
-                     border-radius:var(--r-sm);color:var(--text);padding:8px 12px;
-                     font-family:inherit;font-size:13px;max-width:140px"
-              onchange="onAdminCreatorChange(this.value)">
-      </select>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="sort-btn" id="print-btn" onclick="window.print()" title="Exporter PDF" style="font-size:15px">📄</button>
+        <button class="sort-btn" onclick="toggleCompareCard()" title="Comparer périodes" style="font-size:15px">↔</button>
+        <select id="admin-creator-select" class="hidden"
+                style="background:var(--card);border:1px solid var(--border);
+                       border-radius:var(--r-sm);color:var(--text);padding:8px 12px;
+                       font-family:inherit;font-size:13px;max-width:140px"
+                onchange="onAdminCreatorChange(this.value)">
+        </select>
+      </div>
     </div>
 
     <!-- Sélecteur de compte (toutes plateformes + par compte) -->
@@ -916,6 +989,28 @@ if ('serviceWorker' in navigator) {
       </div>
       <div id="coach-insights"></div>
       <div id="coach-recs" style="display:none"></div>
+    </div>
+
+    <!-- Prédiction prochain post -->
+    <div class="card" id="pred-card" style="display:none">
+      <div class="card-title">🔮 Prédiction prochain post</div>
+      <div id="pred-content"></div>
+    </div>
+
+    <!-- Comparaison A vs B -->
+    <div class="card" id="compare-card" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">↔ Comparer les périodes</div>
+        <button class="sort-btn" onclick="document.getElementById('compare-card').style.display='none'">✕</button>
+      </div>
+      <div class="compare-row" id="compare-btns">
+        <button class="compare-btn active" data-shift="same" onclick="setCompareShift('same')">Période précédente</button>
+        <button class="compare-btn" data-shift="month"  onclick="setCompareShift('month')">Mois précédent</button>
+        <button class="compare-btn" data-shift="year"   onclick="setCompareShift('year')">Même période an dernier</button>
+      </div>
+      <div id="compare-content">
+        <div style="font-size:13px;color:var(--muted)">Sélectionne une référence de comparaison.</div>
+      </div>
     </div>
 
     <!-- Suggestions IA -->
@@ -1272,6 +1367,17 @@ if ('serviceWorker' in navigator) {
           <div class="stat-label">Créateurs actifs</div>
           <div class="stat-value amber" id="admin-creators">—</div>
         </div>
+      </div>
+    </div>
+
+    <!-- Leaderboard consolidé -->
+    <div class="card" id="leaderboard-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin:0">🏆 Classement créateurs</div>
+        <button class="sort-btn" onclick="loadConsolidated()">↺ Refresh</button>
+      </div>
+      <div id="leaderboard-content">
+        <div style="font-size:13px;color:var(--muted)">Chargement…</div>
       </div>
     </div>
   </div>
@@ -1855,6 +1961,7 @@ if ('serviceWorker' in navigator) {
         document.getElementById('nav-admin').classList.remove('hidden');
         document.getElementById('page-admin').classList.remove('hidden');
         loadAdminData();
+        loadConsolidated();
       } else {
         roleEl.textContent = '✏️ Créateur';
         if (currentUser?.creator_name) {
@@ -2470,6 +2577,74 @@ if ('serviceWorker' in navigator) {
         }
       } catch (e) {
         console.error('Erreur données admin :', e);
+      }
+    }
+
+    // ══════════════════════════════════════════════
+    // ADMIN — VUE CONSOLIDÉE (leaderboard)
+    // ══════════════════════════════════════════════
+    async function loadConsolidated() {
+      const content = document.getElementById('leaderboard-content');
+      if (!content) return;
+      content.innerHTML = '<div class="spinner" style="margin:16px auto"></div>';
+
+      try {
+        const resp = await fetch(
+          `${API}/api/admin/consolidated?days=${currentDays}`,
+          { credentials: 'include' }
+        );
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Erreur');
+
+        const creators = data.creators || [];
+        const totals   = data.totals   || {};
+
+        if (!creators.length) {
+          content.innerHTML = '<div style="color:var(--muted);font-size:13px">Aucune donnée disponible — les créateurs doivent charger leurs stats au moins une fois.</div>';
+          return;
+        }
+
+        const GRADE_COLORS = { A: '#3ddc84', B: '#7c6aff', C: '#ffb347', D: '#ff8c42', F: '#ff5555' };
+        const medals = ['🥇','🥈','🥉'];
+
+        content.innerHTML = `
+          <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:100px;background:var(--surface);border-radius:var(--r-sm);padding:10px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:2px">VUES TOTALES</div>
+              <div style="font-size:18px;font-weight:700;color:var(--accent)">${fmt(totals.total_views || 0)}</div>
+            </div>
+            <div style="flex:1;min-width:100px;background:var(--surface);border-radius:var(--r-sm);padding:10px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:2px">POSTS</div>
+              <div style="font-size:18px;font-weight:700;color:var(--amber)">${totals.total_posts || 0}</div>
+            </div>
+            <div style="flex:1;min-width:100px;background:var(--surface);border-radius:var(--r-sm);padding:10px">
+              <div style="font-size:10px;color:var(--muted);margin-bottom:2px">SCORE MOY.</div>
+              <div style="font-size:18px;font-weight:700;color:var(--green)">${totals.avg_score || 0}/100</div>
+            </div>
+          </div>
+          ${creators.map((c, i) => {
+            const color = GRADE_COLORS[c.grade] || 'var(--muted)';
+            const medal = medals[i] || `${i+1}.`;
+            return `
+            <div class="leaderboard-row" style="cursor:pointer" onclick="loadStats('${c.creator}')">
+              <div class="lb-rank">${medal}</div>
+              <div>
+                <div class="lb-name">${c.creator}</div>
+                <div class="lb-meta">${fmt(c.total_views || 0)} vues · ${(c.eng_pct||0).toFixed(1)}% eng · ${c.posts||0} posts</div>
+              </div>
+              <div style="text-align:right">
+                <div class="lb-score" style="color:${color}">${c.score || 0}</div>
+                <div style="font-size:10px;color:${color}">${c.grade || '—'} · ${c.label || '—'}</div>
+              </div>
+            </div>`;
+          }).join('')}`;
+
+        // Met aussi à jour les KPIs admin existants
+        document.getElementById('admin-views').textContent    = fmt(totals.total_views || 0);
+        document.getElementById('admin-creators').textContent = creators.length;
+
+      } catch(e) {
+        content.innerHTML = `<div style="color:var(--muted);font-size:13px">Erreur : ${e.message}</div>`;
       }
     }
 
@@ -3468,7 +3643,157 @@ if ('serviceWorker' in navigator) {
         if (!resp.ok) return;
         const data = await resp.json();
         renderCoach(data);
+        if (data.prediction) renderPrediction(data.prediction);
       } catch (e) { console.error('Coach error:', e); }
+    }
+
+    // ══════════════════════════════════════════════
+    // PRÉDICTION PROCHAIN POST
+    // ══════════════════════════════════════════════
+    function renderPrediction(pred) {
+      const card = document.getElementById('pred-card');
+      const content = document.getElementById('pred-content');
+      if (!card || !content) return;
+
+      if (pred.error) { card.style.display = 'none'; return; }
+
+      const v = pred.predicted_views || 0;
+      const lo = pred.range_low || 0;
+      const hi = pred.range_high || v * 1.5;
+      const trend = pred.trend_pct || 0;
+      const conf  = pred.confidence || 'faible';
+      const confColor = conf === 'haute' ? 'var(--green)' : conf === 'moyenne' ? 'var(--amber)' : 'var(--muted)';
+      const trendIcon = trend > 5 ? '📈' : trend < -5 ? '📉' : '➡️';
+      const trendColor = trend > 0 ? 'var(--green)' : trend < 0 ? 'var(--red)' : 'var(--muted)';
+
+      content.innerHTML = `
+        <div style="display:flex;align-items:flex-end;gap:16px;margin-bottom:12px">
+          <div>
+            <div class="pred-value" id="pred-num">0</div>
+            <div style="font-size:11px;color:var(--muted)">vues estimées</div>
+          </div>
+          <div style="flex:1;padding-bottom:4px">
+            <div style="font-size:12px;color:${trendColor};margin-bottom:4px">
+              ${trendIcon} Tendance ${trend > 0 ? '+' : ''}${trend}%
+            </div>
+            <div style="font-size:11px;color:var(--muted)">
+              Fourchette : ${fmt(lo)} – ${fmt(hi)}
+            </div>
+          </div>
+          <div style="text-align:right;padding-bottom:4px">
+            <div style="font-size:11px;color:${confColor};font-weight:600">Confiance ${conf}</div>
+            <div style="font-size:11px;color:var(--muted)">${pred.based_on} posts analysés</div>
+          </div>
+        </div>
+        <div class="pred-bar" style="background:var(--surface)">
+          <div class="pred-bar-range" style="left:${Math.min(lo/hi*100,90)}%;width:${Math.abs((hi-lo)/hi*100)}%"></div>
+          <div class="pred-bar-fill" style="width:${Math.min(v/hi*100,100)}%"></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">
+          Basé sur la moyenne glissante des ${Math.min(pred.based_on, 5)} derniers posts + tendance amortie.
+        </div>`;
+
+      // Animate counter
+      const numEl = document.getElementById('pred-num');
+      if (numEl) animateCount(numEl, v, 900, n => {
+        if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+        if (n >= 1000)    return (n/1000).toFixed(1) + 'K';
+        return Math.round(n).toString();
+      });
+
+      card.style.display = '';
+    }
+
+    // ══════════════════════════════════════════════
+    // COMPARAISON A vs B
+    // ══════════════════════════════════════════════
+    let _compareShift = 'same';
+
+    function toggleCompareCard() {
+      const card = document.getElementById('compare-card');
+      if (!card) return;
+      const visible = card.style.display !== 'none';
+      card.style.display = visible ? 'none' : '';
+      if (!visible) loadCompare();
+    }
+
+    function setCompareShift(shift) {
+      _compareShift = shift;
+      document.querySelectorAll('.compare-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.shift === shift)
+      );
+      loadCompare();
+    }
+
+    async function loadCompare() {
+      const content = document.getElementById('compare-content');
+      if (!content || !viewedCreator) return;
+      content.innerHTML = '<div class="spinner" style="margin:16px auto"></div>';
+
+      // Calcule les deux périodes
+      const today = new Date();
+      const toA = today.toISOString().slice(0, 10);
+      const fromA = new Date(today - currentDays * 864e5).toISOString().slice(0, 10);
+
+      let fromB, toB;
+      if (_compareShift === 'same') {
+        toB   = fromA;
+        fromB = new Date(new Date(fromA) - currentDays * 864e5).toISOString().slice(0, 10);
+      } else if (_compareShift === 'month') {
+        const d = new Date(today); d.setMonth(d.getMonth() - 1);
+        toB   = d.toISOString().slice(0, 10);
+        fromB = new Date(d - currentDays * 864e5).toISOString().slice(0, 10);
+      } else {
+        const d = new Date(today); d.setFullYear(d.getFullYear() - 1);
+        toB   = d.toISOString().slice(0, 10);
+        fromB = new Date(d - currentDays * 864e5).toISOString().slice(0, 10);
+      }
+
+      try {
+        // Période A = données actuelles déjà en mémoire
+        const kpiA = calcKpis(currentPlatformFilter
+          ? { [currentPlatformFilter]: allStats[currentPlatformFilter] || [] }
+          : allStats);
+
+        // Période B = historique
+        const respB = await fetch(
+          `${API}/api/stats/${encodeURIComponent(viewedCreator)}/history?from_date=${fromB}&to_date=${toB}`,
+          { credentials: 'include' }
+        );
+        const dataB = await respB.json();
+        const statsBFiltered = currentPlatformFilter
+          ? { [currentPlatformFilter]: (dataB.stats_by_platform || {})[currentPlatformFilter] || [] }
+          : (dataB.stats_by_platform || {});
+        const kpiB = calcKpis(statsBFiltered);
+
+        const metrics = [
+          { label: 'Vues totales',  a: kpiA.totalViews,   b: kpiB.totalViews,   fmt: fmt },
+          { label: 'Vues / vidéo',  a: kpiA.avgViews,     b: kpiB.avgViews,     fmt: v => fmt(Math.round(v)) },
+          { label: 'Engagement',    a: kpiA.avgEng,       b: kpiB.avgEng,       fmt: v => v.toFixed(1)+'%' },
+          { label: 'Posts',         a: kpiA.totalPosts,   b: kpiB.totalPosts,   fmt: v => String(v) },
+          { label: 'Likes',         a: kpiA.totalLikes,   b: kpiB.totalLikes,   fmt: fmt },
+        ];
+
+        const shiftLabels = { same: 'Période précédente', month: 'Mois précédent', year: 'An dernier' };
+
+        content.innerHTML = `
+          <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:6px 12px;align-items:center">
+            <div></div>
+            <div style="font-size:10px;color:var(--accent);font-weight:600;text-transform:uppercase">${fromA} → ${toA}</div>
+            <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">${shiftLabels[_compareShift]}</div>
+            ${metrics.map(m => {
+              const delta = m.b > 0 ? ((m.a - m.b) / m.b * 100) : null;
+              const dColor = delta === null ? 'var(--muted)' : delta > 0 ? 'var(--green)' : 'var(--red)';
+              const dText  = delta === null ? '' : ` <span style="font-size:10px;color:${dColor}">${delta > 0 ? '+' : ''}${delta.toFixed(0)}%</span>`;
+              return `
+                <div style="font-size:11px;color:var(--muted)">${m.label}</div>
+                <div style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;color:var(--text)">${m.a > 0 ? m.fmt(m.a) : '—'}${dText}</div>
+                <div style="font-size:14px;font-weight:600;font-family:'DM Mono',monospace;color:var(--muted)">${m.b > 0 ? m.fmt(m.b) : '—'}</div>`;
+            }).join('')}
+          </div>`;
+      } catch(e) {
+        content.innerHTML = `<div style="color:var(--muted);font-size:13px">Erreur : ${e.message}</div>`;
+      }
     }
 
     function renderCoach(data) {
