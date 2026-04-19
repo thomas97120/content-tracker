@@ -25,24 +25,85 @@ def _date(val):
     return val
 
 def parse_youtube(rows):
-    """YouTube Studio → Analytiques → Export (par jour)."""
+    """
+    YouTube Studio export — deux formats supportés :
+    1. Par jour  : colonnes Date / Views / Vues
+    2. Par vidéo : colonnes "Titre de la vidéo" / "Heure de publication de la vidéo" / "Vues"
+    """
+    if not rows:
+        return []
+
+    first = rows[0]
+    keys  = list(first.keys())
+
+    # ── Détecte format par-vidéo (YouTube Studio "Informations relatives aux tableaux") ──
+    is_per_video = ('Titre de la vidéo' in keys or 'Heure de publication de la vidéo' in keys
+                    or 'Contenu' in keys)
+
     results = []
-    for r in rows:
-        date = _date(r.get('Date') or r.get('date') or '')
-        if not date: continue
-        results.append({
-            'plateforme':   'YouTube',
-            'date':         date,
-            'titre':        '—',
-            'format':       'Video',
-            'vues':         _int(r.get('Views') or r.get('Vues') or r.get('views') or 0),
-            'reach':        _int(r.get('Views') or r.get('Vues') or 0),
-            'abonnes':      _int(r.get('Subscribers') or r.get('Abonnés') or 0),
-            'likes':        _int(r.get('Likes') or 0),
-            'commentaires': _int(r.get('Comments') or r.get('Commentaires') or 0),
-            'partages':     0,
-            'sauvegardes':  0,
-        })
+
+    if is_per_video:
+        for r in rows:
+            # Ignore la ligne "Total"
+            if (r.get('Contenu') or '').strip().lower() == 'total':
+                continue
+            if not r.get('Titre de la vidéo') and not r.get('Contenu'):
+                continue
+
+            date = _date(
+                r.get('Heure de publication de la vidéo') or
+                r.get('Date de publication') or
+                r.get('Date') or ''
+            )
+            if not date:
+                continue
+
+            # "Vues" et "Vues intentionnelles" sont deux colonnes distinctes
+            # On prend "Vues" (total) en priorité
+            vues = _int(
+                r.get('Vues') or
+                r.get('Vues intentionnelles') or
+                r.get('Views') or 0
+            )
+
+            # Détecte format (Short si durée <= 60s)
+            duree = _int(r.get('Durée') or r.get('Duration') or 0)
+            fmt = 'Short' if 0 < duree <= 60 else 'Video'
+
+            results.append({
+                'plateforme':   'YouTube',
+                'date':         date,
+                'titre':        r.get('Titre de la vidéo') or r.get('Title') or '—',
+                'format':       fmt,
+                'vues':         vues,
+                'reach':        vues,
+                'abonnes':      _int(r.get('Abonnés') or r.get('Subscribers') or 0),
+                'likes':        _int(r.get("J'aime") or r.get('Likes') or 0),
+                'commentaires': _int(r.get('Commentaires ajoutés') or r.get('Comments') or 0),
+                'partages':     _int(r.get('Partages') or r.get('Shares') or 0),
+                'sauvegardes':  0,
+            })
+
+    else:
+        # Format par jour (ancien)
+        for r in rows:
+            date = _date(r.get('Date') or r.get('date') or '')
+            if not date:
+                continue
+            results.append({
+                'plateforme':   'YouTube',
+                'date':         date,
+                'titre':        '—',
+                'format':       'Video',
+                'vues':         _int(r.get('Views') or r.get('Vues') or r.get('views') or 0),
+                'reach':        _int(r.get('Views') or r.get('Vues') or 0),
+                'abonnes':      _int(r.get('Subscribers') or r.get('Abonnés') or 0),
+                'likes':        _int(r.get('Likes') or 0),
+                'commentaires': _int(r.get('Comments') or r.get('Commentaires') or 0),
+                'partages':     0,
+                'sauvegardes':  0,
+            })
+
     return results
 
 def parse_instagram(rows):
