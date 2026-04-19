@@ -2791,7 +2791,7 @@ if ('serviceWorker' in navigator) {
             idea:        idea.title,
             idea_id:     idea.id || '',
             decision,
-            creator:     currentUser?.creator_name || '',
+            creator:     viewedCreator || currentUser?.creator_name || '',
             format:      idea.format || '',
             viral_score: idea.viral  || '',
             effort:      idea.effort || ''
@@ -2815,7 +2815,7 @@ if ('serviceWorker' in navigator) {
 
       if (!title) { alert("Ajoute un titre pour l'idee"); return; }
 
-      const creator = currentUser?.creator_name || '';
+      const creator = viewedCreator || currentUser?.creator_name || '';
       try {
         const resp = await fetch(`${API}/api/ideas`, {
           method: 'POST',
@@ -2845,7 +2845,7 @@ if ('serviceWorker' in navigator) {
     }
 
     async function generateIdeasAI() {
-      const creator = currentUser?.creator_name || '';
+      const creator = viewedCreator || currentUser?.creator_name || '';
       if (!creator) { toast('Connecte-toi d\'abord', 'error'); return; }
 
       const btn    = document.getElementById('gen-ideas-btn');
@@ -2882,7 +2882,7 @@ if ('serviceWorker' in navigator) {
     }
 
     async function loadIdeas() {
-      const creator = currentUser?.creator_name || '';
+      const creator = viewedCreator || currentUser?.creator_name || '';
       if (!creator) { renderNextIdea(); return; }
       try {
         const resp = await fetch(`${API}/api/ideas/${encodeURIComponent(creator)}`, {
