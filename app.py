@@ -18,6 +18,10 @@ import time
 _stats_cache: dict = {}
 CACHE_TTL = 300  # 5 minutes
 
+# Jobs de sync historique : {job_id: {status, progress, result, error}}
+import threading
+_sync_jobs: dict = {}
+
 from collectors import get_youtube_stats, get_instagram_stats, get_facebook_stats
 from sheets import (
     get_creator_stats, add_manual_stats,
@@ -1030,86 +1034,153 @@ def sync_all():
 HISTORY_DAYS = 365  # fenêtre max de collecte
 
 
-@app.route("/api/stats/<creator>/sync-history", methods=["POST"])
-@login_required
-def sync_history(creator):
-    """
-    Fetch jusqu'à 365 jours de données depuis toutes les APIs connectées,
-    upsert dans SQLite local. Long à s'exécuter (plusieurs minutes pour 1 an).
-    """
-    if not can_access_creator(creator):
-        return jsonify({"error": "Accès interdit"}), 403
-
-    from creator_apis import get_creator_apis
+def _run_sync_history(job_id: str, creator: str, c_apis: dict):
+    """Exécuté dans un thread background — remplit _sync_jobs[job_id]."""
     from collectors import (
         get_youtube_stats_oauth_creator, get_youtube_stats_apikey,
         get_instagram_stats, get_facebook_stats, get_tiktok_stats,
     )
     from history_store import upsert_posts, get_history_summary
 
-    c_apis = get_creator_apis(creator)
+    job = _sync_jobs[job_id]
     all_rows, errors = [], []
 
-    # YouTube OAuth
-    if c_apis.get("google_token"):
-        try:
-            rows = get_youtube_stats_oauth_creator(c_apis["google_token"], days=HISTORY_DAYS)
-            all_rows += rows
-        except Exception as e:
-            errors.append(f"YouTube OAuth : {e}")
-    elif c_apis.get("youtube_api_key") and c_apis.get("youtube_channel_id"):
-        try:
-            rows = get_youtube_stats_apikey(
-                api_key=c_apis["youtube_api_key"],
-                channel_id=c_apis["youtube_channel_id"],
-                days=HISTORY_DAYS,
-            )
-            all_rows += rows
-        except Exception as e:
-            errors.append(f"YouTube API Key : {e}")
+    steps = [
+        ("YouTube",   bool(c_apis.get("google_token") or (c_apis.get("youtube_api_key") and c_apis.get("youtube_channel_id")))),
+        ("Instagram", bool(c_apis.get("meta_access_token") and c_apis.get("instagram_business_id"))),
+        ("Facebook",  bool(c_apis.get("meta_access_token") and c_apis.get("facebook_page_id"))),
+        ("TikTok",    bool(c_apis.get("tiktok_token"))),
+    ]
+    total_steps = sum(1 for _, active in steps if active) or 1
+    done_steps  = 0
 
-    # Instagram (avec pagination)
-    if c_apis.get("meta_access_token") and c_apis.get("instagram_business_id"):
-        try:
-            rows = get_instagram_stats(
-                token=c_apis["meta_access_token"],
-                business_id=c_apis["instagram_business_id"],
-                days=HISTORY_DAYS,
-            )
-            all_rows += rows
-        except Exception as e:
-            errors.append(f"Instagram : {e}")
+    def advance(name):
+        nonlocal done_steps
+        done_steps += 1
+        job["progress"] = int(done_steps / total_steps * 100)
+        job["step"]     = name
 
-    # Facebook (avec pagination)
-    if c_apis.get("meta_access_token") and c_apis.get("facebook_page_id"):
-        try:
-            rows = get_facebook_stats(
-                token=c_apis["meta_access_token"],
-                page_id=c_apis["facebook_page_id"],
-                days=HISTORY_DAYS,
-            )
-            all_rows += rows
-        except Exception as e:
-            errors.append(f"Facebook : {e}")
+    try:
+        # YouTube
+        if c_apis.get("google_token"):
+            job["step"] = "YouTube OAuth…"
+            try:
+                rows = get_youtube_stats_oauth_creator(c_apis["google_token"], days=HISTORY_DAYS)
+                all_rows += rows
+            except Exception as e:
+                errors.append(f"YouTube OAuth : {e}")
+            advance("YouTube")
+        elif c_apis.get("youtube_api_key") and c_apis.get("youtube_channel_id"):
+            job["step"] = "YouTube API Key…"
+            try:
+                rows = get_youtube_stats_apikey(
+                    api_key=c_apis["youtube_api_key"],
+                    channel_id=c_apis["youtube_channel_id"],
+                    days=HISTORY_DAYS,
+                )
+                all_rows += rows
+            except Exception as e:
+                errors.append(f"YouTube API Key : {e}")
+            advance("YouTube")
 
-    # TikTok (limité à 20 vidéos par l'API)
-    if c_apis.get("tiktok_token"):
-        try:
-            rows = get_tiktok_stats(c_apis["tiktok_token"], days=HISTORY_DAYS)
-            all_rows += rows
-        except Exception as e:
-            errors.append(f"TikTok : {e}")
+        # Instagram
+        if c_apis.get("meta_access_token") and c_apis.get("instagram_business_id"):
+            job["step"] = "Instagram (pagination)…"
+            try:
+                rows = get_instagram_stats(
+                    token=c_apis["meta_access_token"],
+                    business_id=c_apis["instagram_business_id"],
+                    days=HISTORY_DAYS,
+                )
+                all_rows += rows
+            except Exception as e:
+                errors.append(f"Instagram : {e}")
+            advance("Instagram")
 
-    stored = upsert_posts(creator, all_rows)
-    summary = get_history_summary(creator)
+        # Facebook
+        if c_apis.get("meta_access_token") and c_apis.get("facebook_page_id"):
+            job["step"] = "Facebook (pagination)…"
+            try:
+                rows = get_facebook_stats(
+                    token=c_apis["meta_access_token"],
+                    page_id=c_apis["facebook_page_id"],
+                    days=HISTORY_DAYS,
+                )
+                all_rows += rows
+            except Exception as e:
+                errors.append(f"Facebook : {e}")
+            advance("Facebook")
 
-    return jsonify({
-        "success":  True,
-        "fetched":  len(all_rows),
-        "stored":   stored,
-        "errors":   errors,
-        "summary":  summary,
-    })
+        # TikTok
+        if c_apis.get("tiktok_token"):
+            job["step"] = "TikTok…"
+            try:
+                rows = get_tiktok_stats(c_apis["tiktok_token"], days=HISTORY_DAYS)
+                all_rows += rows
+            except Exception as e:
+                errors.append(f"TikTok : {e}")
+            advance("TikTok")
+
+        stored  = upsert_posts(creator, all_rows)
+        summary = get_history_summary(creator)
+
+        job.update({
+            "status":   "done",
+            "progress": 100,
+            "step":     "Terminé",
+            "fetched":  len(all_rows),
+            "stored":   stored,
+            "errors":   errors,
+            "summary":  summary,
+        })
+    except Exception as e:
+        job.update({"status": "error", "error": str(e)})
+
+
+@app.route("/api/stats/<creator>/sync-history", methods=["POST"])
+@login_required
+def sync_history(creator):
+    """Lance le sync en background et retourne un job_id immédiatement."""
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+
+    from creator_apis import get_creator_apis
+
+    # Si un job est déjà en cours pour ce créateur → retourne le même
+    for jid, job in _sync_jobs.items():
+        if job.get("creator") == creator and job.get("status") == "running":
+            return jsonify({"job_id": jid, "status": "running", "reused": True})
+
+    job_id = secrets.token_urlsafe(12)
+    _sync_jobs[job_id] = {
+        "creator":  creator,
+        "status":   "running",
+        "progress": 0,
+        "step":     "Démarrage…",
+        "fetched":  0,
+        "stored":   0,
+        "errors":   [],
+        "summary":  {},
+    }
+
+    c_apis = get_creator_apis(creator)
+    t = threading.Thread(
+        target=_run_sync_history,
+        args=(job_id, creator, c_apis),
+        daemon=True,
+    )
+    t.start()
+    return jsonify({"job_id": job_id, "status": "running"}), 202
+
+
+@app.route("/api/stats/sync-status/<job_id>", methods=["GET"])
+@login_required
+def sync_status(job_id):
+    """Polling : retourne l'état du job de sync."""
+    job = _sync_jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Job introuvable"}), 404
+    return jsonify(job)
 
 
 @app.route("/api/stats/<creator>/history", methods=["GET"])

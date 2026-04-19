@@ -2998,26 +2998,46 @@
       okEl.style.display = errEl.style.display = 'none';
 
       btn.disabled    = true;
-      btn.textContent = '⏳ Téléchargement en cours… (peut prendre 1-2 min)';
+      btn.textContent = '⏳ Démarrage…';
 
       try {
-        const resp = await fetch(
+        // Lance le job en background (retour immédiat)
+        const startResp = await fetch(
           `${API}/api/stats/${encodeURIComponent(viewedCreator)}/sync-history`,
           { method: 'POST', credentials: 'include' }
         );
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error);
+        const startData = await startResp.json();
+        if (!startResp.ok && startResp.status !== 202) throw new Error(startData.error);
+        const jobId = startData.job_id;
 
-        const s = data.summary;
-        okEl.innerHTML = `✓ ${data.fetched} posts récupérés, ${data.stored} stockés.<br>
-          Période : ${s.oldest || '—'} → ${s.newest || '—'}`;
-        okEl.style.display = 'block';
-        if (data.errors?.length) {
-          errEl.textContent   = '⚠️ ' + data.errors.join(' | ');
-          errEl.style.display = 'block';
+        // Polling toutes les 3 secondes
+        let done = false;
+        while (!done) {
+          await new Promise(r => setTimeout(r, 3000));
+          const pollResp = await fetch(`${API}/api/stats/sync-status/${jobId}`, { credentials: 'include' });
+          const job      = await pollResp.json();
+
+          // Met à jour le bouton avec la progression
+          const pct = job.progress || 0;
+          btn.textContent = `⏳ ${job.step || '…'} ${pct}%`;
+
+          if (job.status === 'done') {
+            done = true;
+            const s = job.summary || {};
+            okEl.innerHTML = `✓ ${job.fetched} posts récupérés, ${job.stored} stockés.<br>
+              Période : ${s.oldest || '—'} → ${s.newest || '—'}`;
+            okEl.style.display = 'block';
+            if (job.errors?.length) {
+              errEl.textContent   = '⚠️ ' + job.errors.join(' | ');
+              errEl.style.display = 'block';
+            }
+            toast(`${job.stored} posts stockés ✓`, 'success');
+            loadHistory();
+          } else if (job.status === 'error') {
+            done = true;
+            throw new Error(job.error || 'Erreur inconnue');
+          }
         }
-        toast(`${data.stored} posts stockés ✓`, 'success');
-        loadHistory();
       } catch (e) {
         errEl.textContent   = 'Erreur : ' + e.message;
         errEl.style.display = 'block';
