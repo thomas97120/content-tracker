@@ -4744,7 +4744,16 @@ if ('serviceWorker' in navigator) {
       const content = document.getElementById('revenue-content');
       if (!card || !content) return;
 
-      const CPM = { YouTube: 3.0, TikTok: 0.02, Instagram: 1.5, Facebook: 0.8 };
+      // CPM net créateur (après part plateforme) — valeurs réalistes 2024-2025
+      // YouTube : $1.5 RPM net (55% de ~$2.7 CPM annonceur moyen)
+      // TikTok  : $0.02-0.05 Creator Fund (très bas)
+      // Instagram Reels : pas de paiement direct → valeur sponsoring estimée $0.5/1000
+      // Facebook : monetisation variable → $0.3/1000 net estimé
+      const CPM = { YouTube: 1.5, TikTok: 0.04, Instagram: 0.5, Facebook: 0.3, Snapchat: 0 };
+
+      // Pour Reels/Shorts : TikTok paie via Creator Fund (très peu)
+      // Les Reels Instagram n'ont pas de paiement CPM standard hors bonus program
+      const FORMAT_OVERRIDE = {}; // futur : Short YouTube = différent CPM
 
       let total = 0;
       const details = [];
@@ -4752,11 +4761,11 @@ if ('serviceWorker' in navigator) {
       for (const [plat, posts] of Object.entries(allStats)) {
         if (!posts?.length) continue;
         const rate = CPM[plat];
-        if (!rate) continue;
+        if (rate === undefined || rate === null) continue;
         const views = posts.reduce((s, p) => s + (p.vues || 0), 0);
         const rev = views * rate / 1000;
         total += rev;
-        details.push({ plat, views, rev });
+        if (views > 0) details.push({ plat, views, rev, rate });
       }
 
       if (total === 0) {
@@ -4765,20 +4774,20 @@ if ('serviceWorker' in navigator) {
       }
       card.style.display = '';
 
-      const fmtMoney = v => v >= 1000 ? `$${(v/1000).toFixed(1)}K` : `$${v.toFixed(0)}`;
+      const fmtMoney = v => v >= 1000 ? `$${(v/1000).toFixed(1)}K` : `$${v.toFixed(2)}`;
 
       content.innerHTML = `
-        <div style="font-size:28px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace;margin-bottom:4px">${fmtMoney(total)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">estimation CPM moyenne</div>
+        <div style="font-size:28px;font-weight:700;color:var(--green);font-family:'DM Mono',monospace;margin-bottom:2px">${fmtMoney(total)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px">estimation revenus nets créateur</div>
         <div style="display:flex;flex-direction:column;gap:8px">
           ${details.map(d => `
             <div style="display:flex;align-items:center;justify-content:space-between">
-              <span style="font-size:13px;color:var(--muted)">${d.plat} <span style="font-size:11px">(${fmt(d.views)} vues)</span></span>
+              <span style="font-size:13px;color:var(--muted)">${d.plat} <span style="font-size:11px">(${fmt(d.views)} vues · $${d.rate}/K)</span></span>
               <span style="font-size:13px;font-weight:600;color:var(--green);font-family:'DM Mono',monospace">${fmtMoney(d.rev)}</span>
             </div>`).join('')}
         </div>
         <div style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.5">
-          Basé sur CPM moyens estimatifs : YouTube $3, Instagram $1.5, Facebook $0.8, TikTok $0.02 / 1000 vues.
+          ⚠️ Estimation indicative. YouTube = RPM net ~$1.5/K. Instagram Reels & TikTok = valeur très variable selon niche et pays. Les chiffres réels dépendent de ta monétisation activée.
         </div>`;
     }
 
