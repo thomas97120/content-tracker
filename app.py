@@ -980,6 +980,7 @@ Règles :
 - Idées concrètes et directement filmables, pas vagues"""
 
     try:
+        import urllib.error
         body = _json.dumps({
             "model": _MODEL,
             "messages": [{"role": "user", "content": prompt}],
@@ -993,8 +994,12 @@ Règles :
             headers={"Authorization": f"Bearer {_API_KEY}", "Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=25) as r:
-            resp = _json.loads(r.read())
+        try:
+            with urllib.request.urlopen(req, timeout=25) as r:
+                resp = _json.loads(r.read())
+        except urllib.error.HTTPError as http_err:
+            err_body = http_err.read().decode("utf-8", errors="replace")[:300]
+            return jsonify({"error": f"Groq HTTP {http_err.code} — {err_body}"}), 500
 
         content = _json.loads(resp["choices"][0]["message"]["content"])
         generated = content.get("ideas", [])
@@ -1019,7 +1024,7 @@ Règles :
         return jsonify({"success": True, "ideas": saved, "count": len(saved)})
 
     except Exception as e:
-        return jsonify({"error": f"Erreur IA : {str(e)[:120]}"}), 500
+        return jsonify({"error": f"Erreur IA : {str(e)[:200]}"}), 500
 
 
 @app.route("/api/ideas/swipe", methods=["POST"])
@@ -1250,6 +1255,48 @@ def ai_suggestions(creator):
     stats_cur = cached[1].get("stats", {})
     result    = generate_suggestions(stats_cur, creator)
     return jsonify(result)
+
+
+@app.route("/api/admin/debug-ai", methods=["GET"])
+@admin_required
+def debug_ai():
+    """Debug : vérifie la config IA et teste un appel minimal."""
+    import urllib.request, urllib.error
+    from ai_coach import _API_KEY, _API_URL, _MODEL, GROQ_API_KEY, OPENAI_API_KEY
+
+    # Clé masquée pour log sécurisé
+    key_preview = (_API_KEY[:8] + "…" + _API_KEY[-4:]) if len(_API_KEY) > 12 else (f"'{_API_KEY}'" if _API_KEY else "VIDE")
+    info = {
+        "GROQ_API_KEY_set":   bool(GROQ_API_KEY),
+        "OPENAI_API_KEY_set": bool(OPENAI_API_KEY),
+        "active_key_preview": key_preview,
+        "active_url":         _API_URL,
+        "active_model":       _MODEL,
+    }
+
+    if not _API_KEY:
+        info["test"] = "SKIP — aucune clé configurée"
+        return jsonify(info)
+
+    # Test minimal : liste des modèles
+    models_url = _API_URL.replace("/chat/completions", "/models")
+    try:
+        req = urllib.request.Request(
+            models_url,
+            headers={"Authorization": f"Bearer {_API_KEY}"},
+            method="GET",
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        info["test"] = "OK"
+        info["models_count"] = len(data.get("data", []))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:300]
+        info["test"] = f"HTTP {e.code} — {body}"
+    except Exception as e:
+        info["test"] = f"Erreur : {str(e)[:200]}"
+
+    return jsonify(info)
 
 
 @app.route("/api/admin/generate-vapid", methods=["GET"])

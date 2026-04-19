@@ -114,6 +114,7 @@ Analyse ces données et génère une réponse JSON structurée UNIQUEMENT (pas d
         payload["response_format"] = {"type": "json_object"}
         body = json.dumps(payload).encode()
 
+        import urllib.error
         req = urllib.request.Request(
             _API_URL,
             data=body,
@@ -123,8 +124,12 @@ Analyse ces données et génère une réponse JSON structurée UNIQUEMENT (pas d
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=20) as r:
-            resp = json.loads(r.read())
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                resp = json.loads(r.read())
+        except urllib.error.HTTPError as http_err:
+            err_body = http_err.read().decode("utf-8", errors="replace")[:300]
+            return {"error": f"Groq HTTP {http_err.code} — {err_body}"}
 
         content = resp["choices"][0]["message"]["content"]
         result  = json.loads(content)
@@ -132,4 +137,4 @@ Analyse ces données et génère une réponse JSON structurée UNIQUEMENT (pas d
         return result
 
     except Exception as e:
-        return {"error": f"OpenAI erreur : {str(e)[:120]}"}
+        return {"error": f"IA erreur : {str(e)[:200]}"}
