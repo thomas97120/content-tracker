@@ -1262,6 +1262,15 @@ if ('serviceWorker' in navigator) {
       <div class="section-sub">Swipe pour décider</div>
     </div>
 
+    <!-- Génération IA -->
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-primary" id="gen-ideas-btn" onclick="generateIdeasAI()"
+              style="flex:1;font-size:13px;padding:10px">
+        ✨ Générer des idées avec l'IA
+      </button>
+    </div>
+    <div id="gen-ideas-status" style="display:none;font-size:12px;color:var(--muted);text-align:center;margin-bottom:8px"></div>
+
     <div class="swipe-area">
       <div class="swipe-counter" id="swipe-counter">Chargement…</div>
 
@@ -2832,6 +2841,43 @@ if ('serviceWorker' in navigator) {
           .forEach(id => { document.getElementById(id).value = ''; });
         document.getElementById('add-idea-form').classList.add('hidden');
         renderNextIdea();
+      }
+    }
+
+    async function generateIdeasAI() {
+      const creator = currentUser?.creator_name || '';
+      if (!creator) { toast('Connecte-toi d\'abord', 'error'); return; }
+
+      const btn    = document.getElementById('gen-ideas-btn');
+      const status = document.getElementById('gen-ideas-status');
+      btn.disabled    = true;
+      btn.textContent = '⏳ Génération en cours…';
+      status.style.display = '';
+      status.textContent   = 'L\'IA analyse tes tops posts…';
+
+      try {
+        const resp = await fetch(
+          `${API}/api/ideas/${encodeURIComponent(creator)}/generate`,
+          { method: 'POST', credentials: 'include' }
+        );
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Erreur');
+
+        // Ajoute les nouvelles idées à la liste locale
+        const newIdeas = data.ideas || [];
+        ideas = [...ideas, ...newIdeas];
+        saveIdeas();
+        renderNextIdea();
+
+        status.textContent = `✅ ${data.count} idées générées !`;
+        toast(`${data.count} idées ajoutées`, 'success');
+        setTimeout(() => { status.style.display = 'none'; }, 3000);
+      } catch(e) {
+        status.textContent = '❌ ' + e.message;
+        toast('Erreur génération : ' + e.message, 'error');
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = '✨ Générer des idées avec l\'IA';
       }
     }
 

@@ -905,6 +905,123 @@ def add_idea():
     return jsonify({"success": True, "idea": idea})
 
 
+@app.route("/api/ideas/<creator>/generate", methods=["POST"])
+@login_required
+def generate_ideas(creator):
+    """Génère des idées de contenu via IA basées sur les stats du créateur."""
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+
+    from ai_coach import _API_KEY, _API_URL, _MODEL
+    from ideas_store import add_idea, get_ideas
+    import uuid, json as _json, urllib.request
+
+    if not _API_KEY:
+        return jsonify({"error": "GROQ_API_KEY ou OPENAI_API_KEY manquant"}), 400
+
+    # Récupère les stats depuis le cache
+    cache_key = f"{creator}_30_c"
+    cached = _stats_cache.get(cache_key)
+    stats_cur = cached[1].get("stats", {}) if cached else {}
+
+    # Résumé top posts pour le prompt
+    all_posts = []
+    for plat, posts in stats_cur.items():
+        for p in posts:
+            v = p.get("vues", 0) or 0
+            if v > 0:
+                all_posts.append({
+                    "platform": plat,
+                    "title":    (p.get("titre") or "")[:60],
+                    "format":   p.get("format", ""),
+                    "views":    v,
+                })
+    top = sorted(all_posts, key=lambda x: x["views"], reverse=True)[:6]
+    platforms = list({p["platform"] for p in all_posts}) or ["TikTok", "YouTube"]
+
+    top_txt = "\n".join(
+        f'- [{p["platform"]} · {p["format"]}] "{p["title"]}" → {p["views"]:,} vues'
+        for p in top
+    ) or "Pas encore de données — génère des idées génériques pertinentes."
+
+    # Idées déjà existantes (pour éviter doublons)
+    existing = [i.get("title", "") for i in get_ideas(creator)]
+    avoid_txt = "\n".join(f"- {t}" for t in existing[:10]) or "Aucune"
+
+    prompt = f"""Tu es un stratège de contenu expert pour créateurs sur {', '.join(platforms)}.
+
+TOP POSTS DU CRÉATEUR :
+{top_txt}
+
+IDÉES DÉJÀ DANS SA LISTE (ne pas répéter) :
+{avoid_txt}
+
+Génère exactement 8 idées de contenu originales et actionnables adaptées à ce créateur.
+Réponds UNIQUEMENT en JSON valide, sans texte avant/après :
+
+{{
+  "ideas": [
+    {{
+      "title": "Titre accrocheur et court (max 60 chars)",
+      "desc": "Description en 1-2 phrases : angle, structure, pourquoi ça va marcher",
+      "format": "Short|Reel|TikTok|Video|Story|Live",
+      "viral": 8,
+      "effort": 3,
+      "roi": 9
+    }}
+  ]
+}}
+
+Règles :
+- viral (1-10) : potentiel de viralité basé sur les tendances actuelles
+- effort (1-10) : temps/énergie nécessaire (1=très simple, 10=très complexe)
+- roi (1-10) : rapport viral/effort (calcule intelligemment)
+- Mix de formats : au moins 3 formats différents
+- Idées concrètes et directement filmables, pas vagues"""
+
+    try:
+        body = _json.dumps({
+            "model": _MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.85,
+            "max_tokens": 1200,
+            "response_format": {"type": "json_object"},
+        }).encode()
+
+        req = urllib.request.Request(
+            _API_URL, data=body,
+            headers={"Authorization": f"Bearer {_API_KEY}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=25) as r:
+            resp = _json.loads(r.read())
+
+        content = _json.loads(resp["choices"][0]["message"]["content"])
+        generated = content.get("ideas", [])
+
+        saved = []
+        for idea_data in generated[:8]:
+            idea = {
+                "id":         str(uuid.uuid4()),
+                "title":      idea_data.get("title", "")[:80],
+                "desc":       idea_data.get("desc", ""),
+                "format":     idea_data.get("format", ""),
+                "viral":      min(10, max(1, int(idea_data.get("viral", 5)))),
+                "effort":     min(10, max(1, int(idea_data.get("effort", 5)))),
+                "roi":        min(10, max(1, int(idea_data.get("roi", 5)))),
+                "decided":    None,
+                "ai_generated": True,
+                "created_at": dt.datetime.now().isoformat(),
+            }
+            add_idea(creator, idea)
+            saved.append(idea)
+
+        return jsonify({"success": True, "ideas": saved, "count": len(saved)})
+
+    except Exception as e:
+        return jsonify({"error": f"Erreur IA : {str(e)[:120]}"}), 500
+
+
 @app.route("/api/ideas/swipe", methods=["POST"])
 @login_required
 def swipe_idea():
