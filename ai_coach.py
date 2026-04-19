@@ -1,29 +1,42 @@
 """
 ai_coach.py — Suggestions IA basées sur les top posts
-Supporte OpenAI ET Groq (gratuit).
+Supporte OpenRouter (gratuit), OpenAI et Groq.
 
-Render — ajouter UNE des deux variables :
-  GROQ_API_KEY   → gratuit sur console.groq.com  (prioritaire)
-  OPENAI_API_KEY → payant sur platform.openai.com
+Render — ajouter UNE des variables (par ordre de priorité) :
+  OPENROUTER_API_KEY → gratuit sur openrouter.ai (recommandé — pas de blocage IP)
+  OPENAI_API_KEY     → payant sur platform.openai.com
+  GROQ_API_KEY       → gratuit sur console.groq.com (bloqué sur Render/Cloudflare)
 """
 from __future__ import annotations
 import os
 import json
 
-GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+GROQ_API_KEY      = os.environ.get("GROQ_API_KEY", "")
+OPENAI_API_KEY    = os.environ.get("OPENAI_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # Sélection automatique du provider
-if GROQ_API_KEY:
-    _API_URL = "https://api.groq.com/openai/v1/chat/completions"
-    _API_KEY = GROQ_API_KEY
-    _MODEL   = "llama-3.3-70b-versatile"
+if OPENROUTER_API_KEY:
+    _API_URL = "https://openrouter.ai/api/v1/chat/completions"
+    _API_KEY = OPENROUTER_API_KEY
+    _MODEL   = "meta-llama/llama-3.1-8b-instruct:free"
+    _EXTRA_HEADERS = {
+        "HTTP-Referer": os.environ.get("APP_URL", "https://content-tracker.onrender.com"),
+        "X-Title": "Content Tracker",
+    }
 elif OPENAI_API_KEY:
     _API_URL = "https://api.openai.com/v1/chat/completions"
     _API_KEY = OPENAI_API_KEY
     _MODEL   = "gpt-4o-mini"
+    _EXTRA_HEADERS = {}
+elif GROQ_API_KEY:
+    _API_URL = "https://api.groq.com/openai/v1/chat/completions"
+    _API_KEY = GROQ_API_KEY
+    _MODEL   = "llama-3.3-70b-versatile"
+    _EXTRA_HEADERS = {}
 else:
     _API_URL = _API_KEY = _MODEL = ""
+    _EXTRA_HEADERS = {}
 
 
 def _fmt(n):
@@ -115,13 +128,12 @@ Analyse ces données et génère une réponse JSON structurée UNIQUEMENT (pas d
         body = json.dumps(payload).encode()
 
         import urllib.error
+        headers = {"Authorization": f"Bearer {_API_KEY}", "Content-Type": "application/json"}
+        headers.update(_EXTRA_HEADERS)
         req = urllib.request.Request(
             _API_URL,
             data=body,
-            headers={
-                "Authorization": f"Bearer {_API_KEY}",
-                "Content-Type":  "application/json",
-            },
+            headers=headers,
             method="POST",
         )
         try:

@@ -912,7 +912,7 @@ def generate_ideas(creator):
     if not can_access_creator(creator):
         return jsonify({"error": "Accès interdit"}), 403
 
-    from ai_coach import _API_KEY, _API_URL, _MODEL
+    from ai_coach import _API_KEY, _API_URL, _MODEL, _EXTRA_HEADERS
     from ideas_store import add_idea, get_ideas
     import uuid, json as _json, urllib.request
 
@@ -989,9 +989,11 @@ Règles :
             "response_format": {"type": "json_object"},
         }).encode()
 
+        hdrs = {"Authorization": f"Bearer {_API_KEY}", "Content-Type": "application/json"}
+        hdrs.update(_EXTRA_HEADERS)
         req = urllib.request.Request(
             _API_URL, data=body,
-            headers={"Authorization": f"Bearer {_API_KEY}", "Content-Type": "application/json"},
+            headers=hdrs,
             method="POST",
         )
         try:
@@ -1262,16 +1264,17 @@ def ai_suggestions(creator):
 def debug_ai():
     """Debug : vérifie la config IA et teste un appel minimal."""
     import urllib.request, urllib.error
-    from ai_coach import _API_KEY, _API_URL, _MODEL, GROQ_API_KEY, OPENAI_API_KEY
+    from ai_coach import _API_KEY, _API_URL, _MODEL, _EXTRA_HEADERS, GROQ_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY
 
     # Clé masquée pour log sécurisé
     key_preview = (_API_KEY[:8] + "…" + _API_KEY[-4:]) if len(_API_KEY) > 12 else (f"'{_API_KEY}'" if _API_KEY else "VIDE")
     info = {
-        "GROQ_API_KEY_set":   bool(GROQ_API_KEY),
-        "OPENAI_API_KEY_set": bool(OPENAI_API_KEY),
-        "active_key_preview": key_preview,
-        "active_url":         _API_URL,
-        "active_model":       _MODEL,
+        "OPENROUTER_API_KEY_set": bool(OPENROUTER_API_KEY),
+        "GROQ_API_KEY_set":       bool(GROQ_API_KEY),
+        "OPENAI_API_KEY_set":     bool(OPENAI_API_KEY),
+        "active_key_preview":     key_preview,
+        "active_url":             _API_URL,
+        "active_model":           _MODEL,
     }
 
     if not _API_KEY:
@@ -1281,9 +1284,11 @@ def debug_ai():
     # Test minimal : liste des modèles
     models_url = _API_URL.replace("/chat/completions", "/models")
     try:
+        test_hdrs = {"Authorization": f"Bearer {_API_KEY}"}
+        test_hdrs.update(_EXTRA_HEADERS)
         req = urllib.request.Request(
             models_url,
-            headers={"Authorization": f"Bearer {_API_KEY}"},
+            headers=test_hdrs,
             method="GET",
         )
         with urllib.request.urlopen(req, timeout=10) as r:
