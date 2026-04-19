@@ -609,6 +609,29 @@
 .post-stats { display:flex; gap:10px; margin-top:4px; flex-wrap:wrap; }
 .post-stat  { font-size:11px; color:var(--muted); }
 
+/* ── COACH ───────────────────────────────────── */
+.insight-row {
+  display:flex; gap:10px; align-items:flex-start;
+  padding:10px 0; border-bottom:1px solid var(--border);
+  font-size:13px; line-height:1.5;
+}
+.insight-row:last-child { border-bottom:none; }
+.insight-icon { font-size:18px; flex-shrink:0; margin-top:1px; }
+.insight-type-warning  { color:var(--amber); }
+.insight-type-positive { color:var(--green); }
+.insight-type-info     { color:var(--text);  }
+.rec-row {
+  display:flex; gap:10px; align-items:flex-start;
+  padding:12px 0; border-bottom:1px solid var(--border);
+}
+.rec-row:last-child { border-bottom:none; }
+.rec-icon    { font-size:20px; flex-shrink:0; }
+.rec-action  { font-size:13px; font-weight:600; margin-bottom:3px; }
+.rec-why     { font-size:12px; color:var(--muted); line-height:1.5; }
+.rec-priority-high   { border-left:3px solid var(--red);    padding-left:10px; }
+.rec-priority-medium { border-left:3px solid var(--amber);  padding-left:10px; }
+.rec-priority-low    { border-left:3px solid var(--muted);  padding-left:10px; }
+
 /* ── TOAST ───────────────────────────────────── */
 #toast-container {
   position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
@@ -799,6 +822,41 @@
         <div class="kpi-value red" id="kpi-likes">—</div>
         <div class="kpi-sub" id="kpi-comments-sub">— commentaires</div>
       </div>
+    </div>
+
+    <!-- Coach IA -->
+    <div class="card" id="coach-card" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="card-title" style="margin:0">🧠 Coach IA</div>
+        <div id="coach-score-badge" style="font-size:22px;font-weight:700;font-family:'DM Mono',monospace"></div>
+      </div>
+      <!-- Score ring -->
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+        <div style="position:relative;width:80px;height:80px;flex-shrink:0">
+          <svg width="80" height="80" style="transform:rotate(-90deg)">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="var(--border)" stroke-width="8"/>
+            <circle id="score-ring" cx="40" cy="40" r="32" fill="none"
+              stroke="var(--accent)" stroke-width="8"
+              stroke-dasharray="201" stroke-dashoffset="201"
+              stroke-linecap="round" style="transition:stroke-dashoffset .8s ease"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <div id="score-num" style="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;line-height:1">—</div>
+            <div id="score-grade" style="font-size:10px;color:var(--muted)">—</div>
+          </div>
+        </div>
+        <div style="flex:1">
+          <div id="score-label" style="font-size:15px;font-weight:600;margin-bottom:4px">—</div>
+          <div id="score-breakdown" style="font-size:11px;color:var(--muted);line-height:1.8"></div>
+        </div>
+      </div>
+      <!-- Tabs -->
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="sort-btn active" id="coach-tab-insights" onclick="showCoachTab('insights')">💡 Insights</button>
+        <button class="sort-btn"        id="coach-tab-recs"     onclick="showCoachTab('recs')">🎯 Recommandations</button>
+      </div>
+      <div id="coach-insights"></div>
+      <div id="coach-recs" style="display:none"></div>
     </div>
 
     <!-- Meilleure vidéo -->
@@ -1503,6 +1561,7 @@
         renderSummary(); renderPlatformPills(); renderPosts();
         toast('Stats à jour ✓', 'success');
         updateLastUpdated();
+        loadInsights();
       } catch (e) {
         toast('Erreur de rechargement', 'error');
       } finally {
@@ -1786,6 +1845,7 @@
       renderPlatformPills();
       renderPosts();
       updateLastUpdated();
+      loadInsights();
     }
 
     async function fetchCreatorList() {
@@ -2974,6 +3034,92 @@
           }
         }
       });
+    }
+
+
+    // ══════════════════════════════════════════════
+    // COACH IA — Score + Insights + Recommandations
+    // ══════════════════════════════════════════════
+
+    async function loadInsights() {
+      if (!viewedCreator) return;
+      try {
+        const resp = await fetch(
+          `${API}/api/stats/${encodeURIComponent(viewedCreator)}/insights?days=${currentDays}`,
+          { credentials: 'include' }
+        );
+        if (!resp.ok) return;
+        const data = await resp.json();
+        renderCoach(data);
+      } catch (e) { console.error('Coach error:', e); }
+    }
+
+    function renderCoach(data) {
+      const card = document.getElementById('coach-card');
+      if (!card) return;
+
+      const s = data.score || {};
+      const score = s.score || 0;
+
+      // Score ring animation (circonférence = 2π×32 ≈ 201)
+      const ring = document.getElementById('score-ring');
+      const offset = 201 - (score / 100 * 201);
+      const GRADE_COLORS = { A: '#3ddc84', B: '#7c6aff', C: '#ffb347', D: '#ff8c42', F: '#ff5555' };
+      const color = GRADE_COLORS[s.grade] || '#7c6aff';
+      if (ring) {
+        ring.setAttribute('stroke', color);
+        setTimeout(() => ring.style.strokeDashoffset = offset, 100);
+      }
+
+      const numEl = document.getElementById('score-num');
+      if (numEl) animateCount(numEl, score, 800, v => Math.round(v));
+      document.getElementById('score-grade').textContent  = s.grade  || '—';
+      document.getElementById('score-label').textContent  = s.label  || '—';
+      document.getElementById('score-label').style.color  = color;
+      document.getElementById('coach-score-badge').textContent = `${score}/100`;
+      document.getElementById('coach-score-badge').style.color = color;
+
+      const bd = s.breakdown || {};
+      document.getElementById('score-breakdown').innerHTML =
+        `Vues ${bd.views || 0}/40 · Eng. ${bd.engagement || 0}/35 · Fréquence ${bd.frequency || 0}/25`;
+
+      // Insights
+      const insEl = document.getElementById('coach-insights');
+      if (insEl) {
+        const ins = data.insights || [];
+        insEl.innerHTML = ins.length
+          ? ins.map(i => `
+            <div class="insight-row insight-type-${i.type}">
+              <span class="insight-icon">${i.icon}</span>
+              <span>${i.text}</span>
+            </div>`).join('')
+          : '<div style="color:var(--muted);font-size:13px;padding:8px 0">Pas assez de données pour des insights.</div>';
+      }
+
+      // Recommandations
+      const recEl = document.getElementById('coach-recs');
+      if (recEl) {
+        const recs = data.recommendations || [];
+        recEl.innerHTML = recs.length
+          ? recs.map(r => `
+            <div class="rec-row">
+              <span class="rec-icon">${r.icon}</span>
+              <div class="rec-priority-${r.priority}">
+                <div class="rec-action">${r.action}</div>
+                <div class="rec-why">${r.why}</div>
+              </div>
+            </div>`).join('')
+          : '<div style="color:var(--muted);font-size:13px">Aucune recommandation.</div>';
+      }
+
+      card.style.display = '';
+    }
+
+    function showCoachTab(tab) {
+      document.getElementById('coach-insights').style.display = tab === 'insights' ? '' : 'none';
+      document.getElementById('coach-recs').style.display     = tab === 'recs'     ? '' : 'none';
+      document.getElementById('coach-tab-insights').classList.toggle('active', tab === 'insights');
+      document.getElementById('coach-tab-recs').classList.toggle('active',     tab === 'recs');
     }
 
 

@@ -1038,6 +1038,34 @@ def sync_all():
 
 
 # ──────────────────────────────────────────────────────────────
+# INSIGHTS — Smart coach
+# ──────────────────────────────────────────────────────────────
+
+@app.route("/api/stats/<creator>/insights", methods=["GET"])
+@login_required
+def get_insights(creator):
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+
+    from insights_engine import analyze
+
+    # Récupère stats courantes + précédentes (cache si dispo)
+    days = int(request.args.get("days", 7))
+    cache_key = f"{creator}_{days}_c"
+    cached = _stats_cache.get(cache_key)
+
+    if cached and (time.time() - cached[0]) < CACHE_TTL:
+        stats_cur  = cached[1].get("stats", {})
+        stats_prev = cached[1].get("prev_stats", {})
+    else:
+        # Pas de cache → retourne vide (le front appelle /insights après /stats)
+        return jsonify({"error": "Stats non chargées, recharge d'abord"}), 425
+
+    result = analyze(stats_cur, stats_prev, days)
+    return jsonify(result)
+
+
+# ──────────────────────────────────────────────────────────────
 # HISTORIQUE — sync + lecture
 # ──────────────────────────────────────────────────────────────
 
