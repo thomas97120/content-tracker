@@ -7,6 +7,12 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0a0a0a">
 <link rel="manifest" href="/manifest.json">
+<script>
+// Service Worker + Push init (avant tout)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
 <title>Content Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -859,6 +865,17 @@
       <div id="coach-recs" style="display:none"></div>
     </div>
 
+    <!-- Suggestions IA -->
+    <div class="card" id="ai-card" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin:0">✨ Suggestions IA</div>
+        <button class="sort-btn" id="ai-refresh-btn" onclick="loadAISuggestions(true)">Générer</button>
+      </div>
+      <div id="ai-content">
+        <div style="font-size:13px;color:var(--muted)">Clique sur "Générer" pour analyser tes top posts avec l'IA.</div>
+      </div>
+    </div>
+
     <!-- Meilleure vidéo -->
     <div class="card" id="best-video-card" style="display:none;margin-bottom:12px">
       <div class="card-title">🏆 Meilleure vidéo</div>
@@ -1338,6 +1355,17 @@
       </div>
     </div>
 
+    <!-- Notifications Push -->
+    <div class="card">
+      <div class="card-title">🔔 Notifications push</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+        Reçois une alerte si tes vues chutent de 40%+ ou si tu n'as pas posté depuis 5 jours.
+      </div>
+      <div id="push-status" style="font-size:12px;margin-bottom:10px;color:var(--muted)">Chargement…</div>
+      <button class="btn btn-secondary" id="push-btn" onclick="togglePush()" style="margin-bottom:8px">Activer</button>
+      <button class="btn btn-secondary" id="push-test-btn" style="display:none;margin-top:4px" onclick="testPush()">🔔 Envoyer une notif test</button>
+    </div>
+
     <!-- Infos compte -->
     <div class="card">
       <div class="card-title">👤 Mon compte</div>
@@ -1410,7 +1438,7 @@
     <button class="nav-btn" onclick="showPage('saisie', this)">
       <span class="icon">✏️</span>Saisie
     </button>
-    <button class="nav-btn" onclick="showPage('settings', this); loadMyApis()">
+    <button class="nav-btn" onclick="showPage('settings', this); loadMyApis(); initPush()">
       <span class="icon">⚙️</span>Réglages
     </button>
   </nav>
@@ -1432,7 +1460,7 @@
     <button class="nav-btn" onclick="showPage('saisie', this, 'admin')">
       <span class="icon">✏️</span>Saisie
     </button>
-    <button class="nav-btn" onclick="showPage('settings', this, 'admin'); loadMyApis()">
+    <button class="nav-btn" onclick="showPage('settings', this, 'admin'); loadMyApis(); initPush()">
       <span class="icon">⚙️</span>Réglages
     </button>
   </nav>
@@ -3034,6 +3062,200 @@
           }
         }
       });
+    }
+
+
+    // ══════════════════════════════════════════════
+    // PUSH NOTIFICATIONS
+    // ══════════════════════════════════════════════
+    let _pushSubscription = null;
+
+    async function initPush() {
+      const statusEl = document.getElementById('push-status');
+      const btn      = document.getElementById('push-btn');
+      const testBtn  = document.getElementById('push-test-btn');
+      if (!statusEl || !btn) return;
+
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        statusEl.textContent = 'Notifications non supportées sur ce navigateur.';
+        btn.style.display = 'none';
+        return;
+      }
+
+      const perm = Notification.permission;
+      if (perm === 'denied') {
+        statusEl.textContent = '🚫 Notifications bloquées — autorise-les dans les réglages du navigateur.';
+        btn.style.display = 'none';
+        return;
+      }
+
+      // Vérifie si déjà abonné
+      try {
+        const sw  = await navigator.serviceWorker.ready;
+        const sub = await sw.pushManager.getSubscription();
+        if (sub) {
+          _pushSubscription = sub;
+          statusEl.textContent = '✅ Notifications activées';
+          btn.textContent      = 'Désactiver';
+          if (testBtn) testBtn.style.display = '';
+        } else {
+          statusEl.textContent = 'Notifications désactivées';
+          btn.textContent      = 'Activer';
+          if (testBtn) testBtn.style.display = 'none';
+        }
+      } catch (e) {
+        statusEl.textContent = 'Erreur : ' + e.message;
+      }
+    }
+
+    async function togglePush() {
+      const btn      = document.getElementById('push-btn');
+      const statusEl = document.getElementById('push-status');
+      const testBtn  = document.getElementById('push-test-btn');
+      btn.disabled   = true;
+
+      try {
+        const sw = await navigator.serviceWorker.ready;
+
+        if (_pushSubscription) {
+          // Désabonner
+          await _pushSubscription.unsubscribe();
+          await fetch(`${API}/api/push/unsubscribe`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ endpoint: _pushSubscription.endpoint }),
+          });
+          _pushSubscription      = null;
+          statusEl.textContent   = 'Notifications désactivées';
+          btn.textContent        = 'Activer';
+          if (testBtn) testBtn.style.display = 'none';
+          toast('Notifications désactivées', 'info');
+        } else {
+          // Récupère VAPID public key
+          const keyResp = await fetch(`${API}/api/push/vapid-public-key`, { credentials: 'include' });
+          const { publicKey } = await keyResp.json();
+          if (!publicKey) { toast('VAPID_PUBLIC_KEY manquant sur le serveur', 'error'); return; }
+
+          // Convertit la clé VAPID (base64url → Uint8Array)
+          const appKey = _urlBase64ToUint8Array(publicKey);
+
+          const sub = await sw.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: appKey,
+          });
+          _pushSubscription = sub;
+
+          // Enregistre côté serveur
+          await fetch(`${API}/api/push/subscribe`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sub.toJSON()),
+          });
+
+          statusEl.textContent = '✅ Notifications activées';
+          btn.textContent      = 'Désactiver';
+          if (testBtn) testBtn.style.display = '';
+          toast('Notifications activées 🔔', 'success');
+        }
+      } catch (e) {
+        toast('Erreur push : ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function testPush() {
+      const r = await fetch(`${API}/api/push/test`, { method: 'POST', credentials: 'include' });
+      const d = await r.json();
+      if (d.sent > 0) toast('Notification envoyée !', 'success');
+      else toast('Erreur : ' + (d.error || 'aucun abonné'), 'error');
+    }
+
+    function _urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const raw     = atob(base64);
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
+
+
+    // ══════════════════════════════════════════════
+    // SUGGESTIONS IA
+    // ══════════════════════════════════════════════
+    let _aiCache = null;
+
+    async function loadAISuggestions(force = false) {
+      const card    = document.getElementById('ai-card');
+      const content = document.getElementById('ai-content');
+      const btn     = document.getElementById('ai-refresh-btn');
+      if (!card || !content) return;
+
+      card.style.display = '';
+
+      if (_aiCache && !force) { renderAI(_aiCache); return; }
+
+      btn.disabled    = true;
+      btn.textContent = '⏳…';
+      content.innerHTML = '<div class="spinner"></div>';
+
+      try {
+        const resp = await fetch(
+          `${API}/api/stats/${encodeURIComponent(viewedCreator)}/ai-suggestions?days=${currentDays}`,
+          { credentials: 'include' }
+        );
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+        _aiCache = data;
+        renderAI(data);
+        toast('Suggestions IA générées ✨', 'success');
+      } catch (e) {
+        content.innerHTML = `<div style="color:var(--red);font-size:13px">❌ ${e.message}</div>`;
+        toast('Erreur IA : ' + e.message, 'error');
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = '↺ Régénérer';
+      }
+    }
+
+    function renderAI(data) {
+      const content = document.getElementById('ai-content');
+      if (!content) return;
+
+      const ideas = (data.title_ideas || []).map((t, i) =>
+        `<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:11px;font-weight:700;color:var(--accent);width:18px;flex-shrink:0">${i+1}</span>
+          <span style="font-size:13px;font-weight:500">${t}</span>
+        </div>`
+      ).join('');
+
+      content.innerHTML = `
+        ${data.posts_analyzed ? `<div style="font-size:11px;color:var(--muted);margin-bottom:12px">Analysé ${data.posts_analyzed} top posts</div>` : ''}
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Angle gagnant</div>
+            <div style="font-size:12px;font-weight:500">${data.winning_angle || '—'}</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Format optimal</div>
+            <div style="font-size:13px;font-weight:600;color:var(--accent)">${data.winning_format || '—'}</div>
+          </div>
+        </div>
+
+        ${data.hook_pattern ? `<div style="background:rgba(124,106,255,.08);border:1px solid rgba(124,106,255,.2);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px">
+          <span style="color:var(--accent);font-weight:600">🎣 Pattern accroche :</span> ${data.hook_pattern}
+        </div>` : ''}
+
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">💡 5 idées de titres</div>
+        ${ideas}
+
+        ${data.next_video ? `<div style="background:rgba(61,220,132,.08);border:1px solid rgba(61,220,132,.2);border-radius:10px;padding:10px 12px;margin-top:12px;font-size:12px">
+          <span style="color:var(--green);font-weight:600">🎬 Prochaine vidéo :</span> ${data.next_video}
+        </div>` : ''}
+
+        ${data.avoid ? `<div style="margin-top:10px;font-size:12px;color:var(--muted)">
+          <span style="color:var(--red)">⚠️ À éviter :</span> ${data.avoid}
+        </div>` : ''}`;
     }
 
 

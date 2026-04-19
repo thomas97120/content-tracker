@@ -833,6 +833,21 @@ def get_stats(creator):
                 "source": "live",
                 "warnings": errors, "accounts": account_info, "days": days}
         _stats_cache[cache_key] = (time.time(), resp)
+
+        # Push alerts (background, non-bloquant)
+        try:
+            from push_manager import check_and_alert
+            user = current_user()
+            if user:
+                import threading as _t
+                _t.Thread(
+                    target=check_and_alert,
+                    args=(user["email"], by_platform, prev_platform, days),
+                    daemon=True
+                ).start()
+        except Exception:
+            pass
+
         return jsonify(resp)
 
     # Fallback : Sheets
@@ -1040,6 +1055,73 @@ def sync_all():
 # ──────────────────────────────────────────────────────────────
 # INSIGHTS — Smart coach
 # ──────────────────────────────────────────────────────────────
+
+@app.route("/api/push/vapid-public-key", methods=["GET"])
+def vapid_public_key():
+    key = os.environ.get("VAPID_PUBLIC_KEY", "")
+    return jsonify({"publicKey": key})
+
+
+@app.route("/api/push/subscribe", methods=["POST"])
+@login_required
+def push_subscribe():
+    from push_manager import save_subscription
+    user = current_user()
+    sub  = request.get_json(silent=True) or {}
+    if not sub.get("endpoint"):
+        return jsonify({"error": "Abonnement invalide"}), 400
+    save_subscription(user["email"], sub)
+    return jsonify({"success": True})
+
+
+@app.route("/api/push/unsubscribe", methods=["POST"])
+@login_required
+def push_unsubscribe():
+    from push_manager import remove_subscription
+    user     = current_user()
+    data     = request.get_json(silent=True) or {}
+    endpoint = data.get("endpoint", "")
+    remove_subscription(user["email"], endpoint)
+    return jsonify({"success": True})
+
+
+@app.route("/api/push/test", methods=["POST"])
+@login_required
+def push_test():
+    from push_manager import send_push
+    user   = current_user()
+    result = send_push(
+        user["email"],
+        "🧠 Content Tracker",
+        "Les notifications sont activées ! Tu seras alerté en cas de chute de vues.",
+        "/"
+    )
+    return jsonify(result)
+
+
+@app.route("/api/stats/<creator>/ai-suggestions", methods=["GET"])
+@login_required
+def ai_suggestions(creator):
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    from ai_coach import generate_suggestions
+
+    cache_key = f"{creator}_{request.args.get('days', 7)}_c"
+    cached    = _stats_cache.get(cache_key)
+    if not cached:
+        return jsonify({"error": "Stats non chargées"}), 425
+
+    stats_cur = cached[1].get("stats", {})
+    result    = generate_suggestions(stats_cur, creator)
+    return jsonify(result)
+
+
+@app.route("/api/admin/generate-vapid", methods=["GET"])
+@admin_required
+def generate_vapid():
+    from push_manager import generate_vapid_keys
+    return jsonify(generate_vapid_keys())
+
 
 @app.route("/api/stats/<creator>/insights", methods=["GET"])
 @login_required
@@ -1277,6 +1359,11 @@ def health():
 @app.route("/manifest.json")
 def manifest():
     return send_file("manifest.json", mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def service_worker():
+    return send_file("sw.js", mimetype="application/javascript")
 
 
 
