@@ -16,10 +16,38 @@ def _int(val):
     try: return int(str(val).replace(',','').replace(' ','').replace('\xa0','') or 0)
     except: return 0
 
+_FR_MONTHS = {
+    'janvier':'01','février':'02','fevrier':'02','mars':'03','avril':'04',
+    'mai':'05','juin':'06','juillet':'07','août':'08','aout':'08',
+    'septembre':'09','octobre':'10','novembre':'11','décembre':'12','decembre':'12',
+}
+
 def _date(val):
     """Normalise n'importe quel format de date en YYYY-MM-DD."""
     val = str(val).strip()
-    for fmt in ('%Y-%m-%d','%d/%m/%Y','%m/%d/%Y','%d-%m-%Y','%Y/%m/%d','%b %d, %Y','%d %b %Y'):
+
+    # Mois français sans année : "19 avril" → YYYY-04-19
+    # Si la date résultante est dans le futur → année précédente
+    parts = val.lower().split()
+    if len(parts) == 2 and parts[1] in _FR_MONTHS:
+        today = datetime.date.today()
+        year  = today.year
+        try:
+            candidate = datetime.date(year, int(_FR_MONTHS[parts[1]]), int(parts[0]))
+            if candidate > today:
+                candidate = datetime.date(year - 1, int(_FR_MONTHS[parts[1]]), int(parts[0]))
+        except Exception:
+            candidate = None
+        if candidate:
+            return candidate.strftime('%Y-%m-%d')
+
+    # Mois français avec année : "19 avril 2025"
+    if len(parts) == 3 and parts[1] in _FR_MONTHS:
+        try:
+            return f"{int(parts[2])}-{_FR_MONTHS[parts[1]]}-{int(parts[0]):02d}"
+        except: pass
+
+    for fmt in ('%Y-%m-%d','%d/%m/%Y','%m/%d/%Y','%d-%m-%Y','%Y/%m/%d','%b %d, %Y','%d %b %Y','%B %d, %Y'):
         try: return datetime.datetime.strptime(val, fmt).strftime('%Y-%m-%d')
         except: pass
     return val
@@ -149,24 +177,54 @@ def parse_facebook(rows):
     return results
 
 def parse_tiktok(rows):
-    """TikTok Studio → Analytiques → Télécharger."""
+    """
+    TikTok Studio exports — deux formats :
+    1. Overview (par jour) : Date / Video Views / Likes / Comments / Shares
+    2. Par vidéo           : Video title / Publish time / Views / ...
+    """
+    if not rows:
+        return []
+
+    keys = list(rows[0].keys())
+    is_overview = 'Video Views' in keys or ('Date' in keys and 'Video' not in keys and 'Title' not in keys)
+
     results = []
     for r in rows:
-        date = _date(r.get('Date') or r.get('date') or '')
-        if not date: continue
-        results.append({
-            'plateforme':   'TikTok',
-            'date':         date,
-            'titre':        r.get('Video') or r.get('Title') or '—',
-            'format':       'Vidéo courte',
-            'vues':         _int(r.get('Video views') or r.get('Views') or r.get('Vues') or 0),
-            'reach':        _int(r.get('Video views') or r.get('Views') or 0),
-            'abonnes':      _int(r.get('Followers') or r.get('Abonnés') or 0),
-            'likes':        _int(r.get('Likes') or 0),
-            'commentaires': _int(r.get('Comments') or r.get('Commentaires') or 0),
-            'partages':     _int(r.get('Shares') or r.get('Partages') or 0),
-            'sauvegardes':  0,
-        })
+        date = _date(r.get('Date') or r.get('date') or r.get('Publish time') or r.get('Publish Time') or '')
+        if not date:
+            continue
+
+        if is_overview:
+            vues = _int(r.get('Video Views') or r.get('Video views') or r.get('Views') or 0)
+            if vues == 0:
+                continue  # Ignore jours sans vues
+            results.append({
+                'plateforme':   'TikTok',
+                'date':         date,
+                'titre':        f'TikTok {date}',
+                'format':       'Vidéo courte',
+                'vues':         vues,
+                'reach':        vues,
+                'abonnes':      _int(r.get('Followers') or r.get('New followers') or 0),
+                'likes':        _int(r.get('Likes') or 0),
+                'commentaires': _int(r.get('Comments') or 0),
+                'partages':     _int(r.get('Shares') or 0),
+                'sauvegardes':  0,
+            })
+        else:
+            results.append({
+                'plateforme':   'TikTok',
+                'date':         date,
+                'titre':        r.get('Video title') or r.get('Video') or r.get('Title') or '—',
+                'format':       'Vidéo courte',
+                'vues':         _int(r.get('Video views') or r.get('Views') or r.get('Vues') or 0),
+                'reach':        _int(r.get('Video views') or r.get('Views') or 0),
+                'abonnes':      _int(r.get('Followers') or r.get('Abonnés') or 0),
+                'likes':        _int(r.get('Likes') or 0),
+                'commentaires': _int(r.get('Comments') or r.get('Commentaires') or 0),
+                'partages':     _int(r.get('Shares') or r.get('Partages') or 0),
+                'sauvegardes':  0,
+            })
     return results
 
 def parse_snapchat(rows):
