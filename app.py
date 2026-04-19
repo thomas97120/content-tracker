@@ -149,6 +149,13 @@ def can_access_creator(requested_creator):
     return user.get("creator_name") == requested_creator
 
 
+def _clear_creator_cache(creator: str):
+    """Vide toutes les entrées de cache pour ce créateur."""
+    keys = [k for k in _stats_cache if k.startswith(f"{creator}_")]
+    for k in keys:
+        _stats_cache.pop(k, None)
+
+
 # ──────────────────────────────────────────────────────────────
 # AUTH — LOGIN / LOGOUT / ME
 # ──────────────────────────────────────────────────────────────
@@ -491,6 +498,7 @@ def google_callback():
             "scopes":        list(creds.scopes or []),
         }
         save_creator_apis(creator, {"google_token": _json.dumps(token_data)})
+        _clear_creator_cache(creator)
         return redirect("/?connected=youtube")
     except Exception as e:
         return redirect(f"/?error={str(e)[:80]}")
@@ -586,6 +594,7 @@ def tiktok_callback():
             "expires_in":    token_resp.get("expires_in"),
         }
         save_creator_apis(creator, {"tiktok_token": _json.dumps(token_data)})
+        _clear_creator_cache(creator)
         return redirect("/?connected=tiktok")
 
     except Exception as e:
@@ -674,6 +683,7 @@ def meta_callback():
     if ig_id: apis["instagram_business_id"] = ig_id
 
     save_creator_apis(creator, apis)
+    _clear_creator_cache(creator)
     return redirect("/?connected=meta")
 
 

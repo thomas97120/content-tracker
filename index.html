@@ -2489,21 +2489,14 @@
         window.history.replaceState({}, '', '/');
       }
 
-      if (connected === 'youtube') {
-        showOAuthStatus('✅ YouTube connecté avec succès !');
+      const PLATFORM_LABELS = { youtube: 'YouTube', meta: 'Instagram / Facebook', tiktok: 'TikTok' };
+      if (connected && PLATFORM_LABELS[connected]) {
+        showOAuthStatus(`✅ ${PLATFORM_LABELS[connected]} connecté avec succès !`);
         showPage('settings', document.querySelector('#nav-creator .nav-btn:last-child') ||
                              document.querySelector('#nav-admin .nav-btn:last-child'));
         loadMyApis();
-      } else if (connected === 'meta') {
-        showOAuthStatus('✅ Instagram / Facebook connecté avec succès !');
-        showPage('settings', document.querySelector('#nav-creator .nav-btn:last-child') ||
-                             document.querySelector('#nav-admin .nav-btn:last-child'));
-        loadMyApis();
-      } else if (connected === 'tiktok') {
-        showOAuthStatus('✅ TikTok connecté avec succès !');
-        showPage('settings', document.querySelector('#nav-creator .nav-btn:last-child') ||
-                             document.querySelector('#nav-admin .nav-btn:last-child'));
-        loadMyApis();
+        // Force reload stats — bypass cache so new platform appears immediately
+        setTimeout(() => forceRefresh(), 800);
       } else if (error) {
         showOAuthStatus('❌ Erreur : ' + decodeURIComponent(error), true);
       }
