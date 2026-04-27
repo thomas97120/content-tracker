@@ -238,22 +238,25 @@ def get_tiktok_stats(token_json: str, days=None):
         "Content-Type":  "application/json",
     }
 
-    # 1. Infos utilisateur (optionnel — scope peut manquer en sandbox)
+    # 1. Infos utilisateur — follower_count nécessite scope user.info.stats
     followers = 0
     disp_name = "TikTok"
     try:
         _ur = requests.get(
             "https://open.tiktokapis.com/v2/user/info/",
             headers=headers,
-            params={"fields": "open_id,display_name,username,follower_count"}
+            params={"fields": "open_id,union_id,avatar_url,display_name,bio_description,follower_count,following_count,likes_count,video_count"}
         )
         user_resp = _ur.json()
-        if user_resp.get("error", {}).get("code", "ok") == "ok":
+        err_code = user_resp.get("error", {}).get("code", "ok")
+        if err_code == "ok":
             u         = user_resp.get("data", {}).get("user", {})
-            followers = u.get("follower_count", 0)
-            disp_name = u.get("display_name") or u.get("username", "TikTok")
+            followers = u.get("follower_count") or 0
+            disp_name = u.get("display_name") or "TikTok"
+            if followers == 0:
+                print("TikTok: follower_count=0 — scope user.info.stats manquant? Reconnecte TikTok.")
         else:
-            print(f"TikTok user/info ignoré: {user_resp.get('error', {})}")
+            print(f"TikTok user/info ignoré: {err_code} — {user_resp.get('error', {}).get('message','')}")
     except Exception as e:
         print(f"TikTok user/info ignoré: {e}")
 
