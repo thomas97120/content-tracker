@@ -710,6 +710,17 @@ def meta_callback():
 # ──────────────────────────────────────────────────────────────
 # CREATOR — CLÉS API
 # ──────────────────────────────────────────────────────────────
+@app.route("/api/creators", methods=["GET"])
+@login_required
+def list_creators():
+    """Liste des créateurs (admin : tous, créateur : juste le sien)."""
+    user = current_user()
+    if user.get("role") == "admin":
+        return jsonify(get_all_creators())
+    creator = user.get("creator_name")
+    return jsonify([creator] if creator else [])
+
+
 @app.route("/api/creator/apis", methods=["GET"])
 @login_required
 def get_my_apis():

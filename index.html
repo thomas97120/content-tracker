@@ -1535,6 +1535,15 @@ if ('serviceWorker' in navigator) {
       <div class="section-sub" id="settings-email-sub">Mon compte</div>
     </div>
 
+    <!-- Sélecteur créateur (admin seulement) -->
+    <div id="settings-creator-selector" style="display:none;margin-bottom:16px">
+      <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em">Gérer les APIs de</label>
+      <select id="settings-creator-select"
+        style="margin-top:6px;width:100%;padding:10px 14px;background:#1a1a24;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px"
+        onchange="settingsCreatorChanged(this.value)">
+      </select>
+    </div>
+
     <!-- Connecter mes comptes (OAuth) -->
     <div class="card">
       <div class="card-title">🔗 Comptes connectés</div>
@@ -1765,7 +1774,7 @@ if ('serviceWorker' in navigator) {
     <button class="nav-btn" onclick="showPage('saisie', this)">
       <span class="icon">✏️</span>Saisie
     </button>
-    <button class="nav-btn" onclick="showPage('settings', this); loadMyApis(); initPush()">
+    <button class="nav-btn" onclick="showPage('settings', this); initSettingsCreatorSelector(); loadMyApis(); initPush()">
       <span class="icon">⚙️</span>Réglages
     </button>
   </nav>
@@ -1787,7 +1796,7 @@ if ('serviceWorker' in navigator) {
     <button class="nav-btn" onclick="showPage('saisie', this, 'admin')">
       <span class="icon">✏️</span>Saisie
     </button>
-    <button class="nav-btn" onclick="showPage('settings', this, 'admin'); loadMyApis(); initPush()">
+    <button class="nav-btn" onclick="showPage('settings', this, 'admin'); initSettingsCreatorSelector(); loadMyApis(); initPush()">
       <span class="icon">⚙️</span>Réglages
     </button>
   </nav>
@@ -3079,9 +3088,36 @@ if ('serviceWorker' in navigator) {
     // ══════════════════════════════════════════════
     // RÉGLAGES — CLÉS API
     // ══════════════════════════════════════════════
+
+    // Quel créateur on gère dans les settings (admin seulement)
+    let settingsCreator = null;
+
+    function settingsCreatorChanged(name) {
+      settingsCreator = name;
+      loadMyApis();
+    }
+
+    async function initSettingsCreatorSelector() {
+      if (currentRole !== 'admin') return;
+      try {
+        const resp = await fetch(`${API}/api/creators`, { credentials: 'include' });
+        if (!resp.ok) return;
+        const creators = await resp.json();
+        const sel = document.getElementById('settings-creator-select');
+        const wrap = document.getElementById('settings-creator-selector');
+        if (!sel || !wrap || !creators.length) return;
+        sel.innerHTML = creators.map(c =>
+          `<option value="${c}" ${c === (settingsCreator || viewedCreator || creators[0]) ? 'selected' : ''}>${c}</option>`
+        ).join('');
+        if (!settingsCreator) settingsCreator = sel.value;
+        wrap.style.display = 'block';
+      } catch (e) {}
+    }
+
     async function loadMyApis() {
       try {
-        const forParam = (currentRole === 'admin' && viewedCreator) ? `?for=${encodeURIComponent(viewedCreator)}` : '';
+        const managedCreator = currentRole === 'admin' ? (settingsCreator || viewedCreator) : null;
+        const forParam = managedCreator ? `?for=${encodeURIComponent(managedCreator)}` : '';
         const resp = await fetch(`${API}/api/creator/apis${forParam}`, { credentials: 'include' });
         if (!resp.ok) return;
         const data = await resp.json();
@@ -3109,8 +3145,8 @@ if ('serviceWorker' in navigator) {
         // YouTube
         const badgeYT = document.getElementById('badge-youtube');
         const btnYT   = document.getElementById('btn-connect-google');
-        if (btnYT && currentRole === 'admin' && viewedCreator) {
-          btnYT.href = `/api/auth/google/connect?for=${encodeURIComponent(viewedCreator)}`;
+        if (btnYT && currentRole === 'admin' && managedCreator) {
+          btnYT.href = `/api/auth/google/connect?for=${encodeURIComponent(managedCreator)}`;
         }
         if (ytOAuth === 'connecté') {
           if (badgeYT) { badgeYT.className = 'account-badge on'; badgeYT.textContent = '✅ OAuth connecté'; }
@@ -3126,8 +3162,8 @@ if ('serviceWorker' in navigator) {
         // Instagram + expiry
         const badgeIG      = document.getElementById('badge-instagram');
         const btnMeta      = document.getElementById('btn-connect-meta');
-        if (btnMeta && currentRole === 'admin' && viewedCreator) {
-          btnMeta.href = `/api/auth/meta/connect?for=${encodeURIComponent(viewedCreator)}`;
+        if (btnMeta && currentRole === 'admin' && managedCreator) {
+          btnMeta.href = `/api/auth/meta/connect?for=${encodeURIComponent(managedCreator)}`;
         }
         const expiryInfo   = document.getElementById('meta-expiry-info');
         const expiryWarn   = document.getElementById('meta-expiry-warning');
@@ -3167,8 +3203,8 @@ if ('serviceWorker' in navigator) {
         const badgeTT  = document.getElementById('badge-tiktok');
         const btnTT    = document.getElementById('btn-connect-tiktok');
         const ttTok    = data['tiktok_token'];
-        if (btnTT && currentRole === 'admin' && viewedCreator) {
-          btnTT.href = `/api/auth/tiktok/connect?for=${encodeURIComponent(viewedCreator)}`;
+        if (btnTT && currentRole === 'admin' && managedCreator) {
+          btnTT.href = `/api/auth/tiktok/connect?for=${encodeURIComponent(managedCreator)}`;
         }
         if (ttTok && ttTok !== 'Non configuré') {
           if (badgeTT) { badgeTT.className = 'account-badge on'; badgeTT.textContent = '✅ Connecté'; }
