@@ -1656,6 +1656,18 @@ def debug_tiktok(creator):
     })
 
 
+@app.route("/api/admin/debug-creators", methods=["GET"])
+@admin_required
+def debug_creators():
+    """Liste les créateurs stockés et leurs clés présentes (sans valeurs)."""
+    from creator_apis import export_all
+    data = export_all()
+    return jsonify({
+        creator: list(keys.keys())
+        for creator, keys in data.items()
+    })
+
+
 @app.route("/api/admin/generate-vapid", methods=["GET"])
 @admin_required
 def generate_vapid():
