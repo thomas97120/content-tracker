@@ -3384,7 +3384,7 @@ if ('serviceWorker' in navigator) {
           : byDate[d]
       );
 
-      if (!labels.length) {
+      if (!labels.length || currentRole !== 'admin') {
         document.getElementById('chart-card').style.display = 'none';
         return;
       }
