@@ -442,8 +442,13 @@ def google_connect():
     )
 
     user = current_user()
+    for_creator = request.args.get("for", "").strip()
+    if for_creator and user.get("role") == "admin":
+        oauth_creator = for_creator
+    else:
+        oauth_creator = user.get("creator_name") or user["email"]
     session["oauth_state"]         = state
-    session["oauth_creator"]       = user.get("creator_name") or user["email"]
+    session["oauth_creator"]       = oauth_creator
     session["oauth_code_verifier"] = getattr(flow, "code_verifier", None)
     return redirect(auth_url)
 
@@ -517,7 +522,13 @@ def tiktok_connect():
 
     user    = current_user()
     state   = secrets.token_urlsafe(16)
-    creator = user.get("creator_name") or user["email"]
+
+    # Admin peut passer ?for=creatorname pour connecter au nom d'un créateur
+    for_creator = request.args.get("for", "").strip()
+    if for_creator and user.get("role") == "admin":
+        creator = for_creator
+    else:
+        creator = user.get("creator_name") or user["email"]
 
     # PKCE
     code_verifier  = secrets.token_urlsafe(40)
@@ -613,7 +624,11 @@ def meta_connect():
 
     user    = current_user()
     state   = secrets.token_urlsafe(16)
-    creator = user.get("creator_name") or user["email"]
+    for_creator = request.args.get("for", "").strip()
+    if for_creator and user.get("role") == "admin":
+        creator = for_creator
+    else:
+        creator = user.get("creator_name") or user["email"]
     session["meta_state"]    = state
     session["oauth_creator"] = creator
 
@@ -700,7 +715,12 @@ def meta_callback():
 def get_my_apis():
     from creator_apis import get_masked_apis
     user    = current_user()
-    creator = user.get("creator_name") or user["email"]
+    # Admin peut passer ?for=creatorname pour lire les clés d'un créateur
+    for_creator = request.args.get("for", "").strip()
+    if for_creator and user.get("role") == "admin":
+        creator = for_creator
+    else:
+        creator = user.get("creator_name") or user["email"]
     return jsonify(get_masked_apis(creator))
 
 
@@ -709,7 +729,11 @@ def get_my_apis():
 def save_my_apis():
     from creator_apis import save_creator_apis
     user    = current_user()
-    creator = user.get("creator_name") or user["email"]
+    for_creator = request.args.get("for", "").strip()
+    if for_creator and user.get("role") == "admin":
+        creator = for_creator
+    else:
+        creator = user.get("creator_name") or user["email"]
     data    = request.get_json(silent=True) or {}
     save_creator_apis(creator, data)
     return jsonify({"success": True, "message": "Clés API sauvegardées."})

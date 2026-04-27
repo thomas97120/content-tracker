@@ -3081,7 +3081,8 @@ if ('serviceWorker' in navigator) {
     // ══════════════════════════════════════════════
     async function loadMyApis() {
       try {
-        const resp = await fetch(`${API}/api/creator/apis`, { credentials: 'include' });
+        const forParam = (currentRole === 'admin' && viewedCreator) ? `?for=${encodeURIComponent(viewedCreator)}` : '';
+        const resp = await fetch(`${API}/api/creator/apis${forParam}`, { credentials: 'include' });
         if (!resp.ok) return;
         const data = await resp.json();
 
@@ -3108,6 +3109,9 @@ if ('serviceWorker' in navigator) {
         // YouTube
         const badgeYT = document.getElementById('badge-youtube');
         const btnYT   = document.getElementById('btn-connect-google');
+        if (btnYT && currentRole === 'admin' && viewedCreator) {
+          btnYT.href = `/api/auth/google/connect?for=${encodeURIComponent(viewedCreator)}`;
+        }
         if (ytOAuth === 'connecté') {
           if (badgeYT) { badgeYT.className = 'account-badge on'; badgeYT.textContent = '✅ OAuth connecté'; }
           if (btnYT)   { btnYT.className = 'account-action'; btnYT.textContent = 'Reconnecter'; }
@@ -3122,6 +3126,9 @@ if ('serviceWorker' in navigator) {
         // Instagram + expiry
         const badgeIG      = document.getElementById('badge-instagram');
         const btnMeta      = document.getElementById('btn-connect-meta');
+        if (btnMeta && currentRole === 'admin' && viewedCreator) {
+          btnMeta.href = `/api/auth/meta/connect?for=${encodeURIComponent(viewedCreator)}`;
+        }
         const expiryInfo   = document.getElementById('meta-expiry-info');
         const expiryWarn   = document.getElementById('meta-expiry-warning');
         const btnRefresh   = document.getElementById('btn-refresh-meta');
@@ -3160,6 +3167,9 @@ if ('serviceWorker' in navigator) {
         const badgeTT  = document.getElementById('badge-tiktok');
         const btnTT    = document.getElementById('btn-connect-tiktok');
         const ttTok    = data['tiktok_token'];
+        if (btnTT && currentRole === 'admin' && viewedCreator) {
+          btnTT.href = `/api/auth/tiktok/connect?for=${encodeURIComponent(viewedCreator)}`;
+        }
         if (ttTok && ttTok !== 'Non configuré') {
           if (badgeTT) { badgeTT.className = 'account-badge on'; badgeTT.textContent = '✅ Connecté'; }
           if (btnTT)   { btnTT.className = 'account-action'; btnTT.textContent = 'Reconnecter'; }
