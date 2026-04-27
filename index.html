@@ -1191,14 +1191,14 @@ if ('serviceWorker' in navigator) {
     <div class="card" id="best-hour-card" style="display:none">
       <div class="card-title">🕐 Meilleure heure pour poster</div>
       <div id="best-hour-content"></div>
-      <canvas id="hour-chart" height="140" style="margin-top:12px"></canvas>
+      <canvas id="hour-chart" height="160" style="margin-top:12px;max-height:160px"></canvas>
     </div>
 
     <!-- Jour de la semaine -->
     <div class="card" id="weekday-card" style="display:none">
       <div class="card-title">📅 Meilleur jour de la semaine</div>
       <div id="weekday-content"></div>
-      <canvas id="weekday-chart" height="120" style="margin-top:10px"></canvas>
+      <canvas id="weekday-chart" height="150" style="margin-top:10px;max-height:150px"></canvas>
     </div>
 
     <!-- Comparaison format -->
@@ -1211,7 +1211,7 @@ if ('serviceWorker' in navigator) {
     <div class="card" id="donut-card" style="display:none">
       <div class="card-title">🍩 Répartition des vues</div>
       <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
-        <canvas id="donut-chart" width="140" height="140" style="flex-shrink:0"></canvas>
+        <canvas id="donut-chart" width="160" height="160" style="flex-shrink:0;width:160px;height:160px"></canvas>
         <div id="donut-legend" style="flex:1;min-width:120px;display:flex;flex-direction:column;gap:8px"></div>
       </div>
     </div>
@@ -3440,6 +3440,7 @@ if ('serviceWorker' in navigator) {
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -3515,6 +3516,7 @@ if ('serviceWorker' in navigator) {
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: { legend: { display: false },
             tooltip: { callbacks: { label: ctx => ctx.parsed.y != null ? fmt(ctx.parsed.y) + ' vues moy.' : 'Aucun post' } }
           },
@@ -3635,6 +3637,8 @@ if ('serviceWorker' in navigator) {
         },
         options: {
           cutout: '68%',
+          responsive: false,
+          maintainAspectRatio: true,
           plugins: {
             legend: { display: false },
             tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmt(ctx.parsed)} vues (${Math.round(ctx.parsed/total*100)}%)` } }
