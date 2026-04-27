@@ -1618,6 +1618,44 @@ def debug_ai():
     return jsonify(info)
 
 
+@app.route("/api/admin/debug-tiktok/<creator>", methods=["GET"])
+@admin_required
+def debug_tiktok(creator):
+    """Debug: teste l'appel user/info TikTok brut pour vérifier le scope follower_count."""
+    import requests as _req
+    from creator_apis import get_creator_apis
+    import json as _json
+
+    apis  = get_creator_apis(creator)
+    token_json = apis.get("tiktok_token", "")
+    if not token_json:
+        return jsonify({"error": "Pas de token TikTok pour ce créateur"}), 400
+
+    try:
+        data         = _json.loads(token_json)
+        access_token = data.get("access_token", "")
+        scope        = data.get("scope", "")
+        open_id      = data.get("open_id", "")
+    except Exception as e:
+        return jsonify({"error": f"Token JSON invalide: {e}"}), 400
+
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+
+    # Test avec tous les champs stats
+    r = _req.get(
+        "https://open.tiktokapis.com/v2/user/info/",
+        headers=headers,
+        params={"fields": "open_id,display_name,username,follower_count,following_count,likes_count,video_count"},
+        timeout=10,
+    )
+    return jsonify({
+        "stored_scope": scope,
+        "open_id": open_id,
+        "http_status": r.status_code,
+        "api_response": r.json(),
+    })
+
+
 @app.route("/api/admin/generate-vapid", methods=["GET"])
 @admin_required
 def generate_vapid():
