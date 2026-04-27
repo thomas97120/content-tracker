@@ -2190,14 +2190,16 @@ if ('serviceWorker' in navigator) {
         prevStats    = data.prev_stats || {};
         allAccounts  = data.accounts || {};
 
-        // Affiche les erreurs/warnings de fetch live
-        const msgs = [...(data.errors || []), ...(data.warnings || [])];
+        // Affiche les erreurs/warnings de fetch live (admin seulement)
+        const msgs = [...(data.errors || []), ...(data.warnings || [])]
+          .filter(m => currentRole === 'admin' || !m.toLowerCase().includes('facebook'));
         const dbgEl = document.getElementById('stats-debug');
         if (dbgEl) {
-          dbgEl.innerHTML = msgs.length
-            ? msgs.map(m => `<div>⚠️ ${m}</div>`).join('')
+          const adminMsgs = currentRole === 'admin' ? msgs : msgs.filter(m => !m.includes('0 résultats') && !m.includes('Facebook'));
+          dbgEl.innerHTML = adminMsgs.length
+            ? adminMsgs.map(m => `<div>⚠️ ${m}</div>`).join('')
             : '';
-          dbgEl.style.display = msgs.length ? 'block' : 'none';
+          dbgEl.style.display = adminMsgs.length ? 'block' : 'none';
         }
       } catch (e) {
         console.error(e);
@@ -4864,6 +4866,7 @@ if ('serviceWorker' in navigator) {
     // ══════════════════════════════════════════════
     async function loadStreak() {
       if (!viewedCreator) return;
+      if (currentRole !== 'admin') { const c = document.getElementById('streak-card'); if (c) c.style.display = 'none'; return; }
       try {
         const resp = await fetch(
           `${API}/api/stats/${encodeURIComponent(viewedCreator)}/streak`,
