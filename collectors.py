@@ -309,25 +309,41 @@ def get_instagram_stats(token=None, business_id=None, days=None):
         return []
     _days = days or DAYS_TO_FETCH
     try:
-        BASE   = "https://graph.facebook.com/v19.0"
+        BASE   = "https://graph.facebook.com/v21.0"
         params = {"access_token": token}
 
         account_resp = requests.get(
             f"{BASE}/{business_id}",
-            params={**params, "fields": "followers_count"}
+            params={**params, "fields": "followers_count,name"}
         ).json()
-        followers = account_resp.get("followers_count", 0)
+        # Token expiré → message clair
+        if "error" in account_resp:
+            err = account_resp["error"]
+            code = err.get("code", 0)
+            if code in (190, 102, 2500):
+                raise ValueError(f"Token Meta expiré ou révoqué — reconnecte-toi (code {code})")
+            raise ValueError(f"Instagram API : {err.get('message', account_resp)}")
+
+        followers  = account_resp.get("followers_count", 0)
+        acct_name  = account_resp.get("name", "Instagram")
 
         results = []
         cutoff  = datetime.datetime.now() - datetime.timedelta(days=_days)
 
-        # Pagination sur /media
-        page_url = f"{BASE}/{business_id}/media"
-        page_params = {**params, "fields": "id,caption,media_type,timestamp", "limit": 100}
+        # Pagination sur /media — inclut media_product_type pour détecter Reels
+        page_url    = f"{BASE}/{business_id}/media"
+        page_params = {
+            **params,
+            "fields": "id,caption,media_type,media_product_type,timestamp",
+            "limit":  100,
+        }
         fetched_pages = 0
 
         while page_url and fetched_pages < 10:          # max 10 pages = 1000 médias
-            media_resp = requests.get(page_url, params=page_params if fetched_pages == 0 else {}).json()
+            media_resp = requests.get(
+                page_url,
+                params=page_params if fetched_pages == 0 else {}
+            ).json()
             fetched_pages += 1
             stop_pagination = False
 
@@ -338,36 +354,74 @@ def get_instagram_stats(token=None, business_id=None, days=None):
                     stop_pagination = True
                     break
 
-                media_type = media.get("media_type", "IMAGE")
-                insights   = requests.get(
-                    f"{BASE}/{media['id']}/insights",
-                    params={**params, "metric": "impressions,reach,likes_count,comments_count,saved,shares"}
-                ).json()
-                stats = {item["name"]: item["values"][0]["value"]
-                         for item in insights.get("data", [])}
+                media_type    = media.get("media_type", "IMAGE")
+                product_type  = media.get("media_product_type", "")
+
+                # Format lisible
+                if product_type == "REELS" or media_type == "REELS":
+                    fmt = "Reel"
+                elif media_type == "VIDEO":
+                    fmt = "Video"
+                elif media_type == "CAROUSEL_ALBUM":
+                    fmt = "Carrousel"
+                else:
+                    fmt = "Photo"
+
+                # Métriques disponibles selon le type
+                # CAROUSEL_ALBUM ne supporte pas impressions via /insights
+                if media_type == "CAROUSEL_ALBUM":
+                    metrics = "reach,likes,comments,saved,shares"
+                elif fmt in ("Reel", "Video"):
+                    metrics = "impressions,reach,likes,comments,saved,shares,plays"
+                else:
+                    metrics = "impressions,reach,likes,comments,saved,shares"
+
+                stats = {}
+                try:
+                    ins_resp = requests.get(
+                        f"{BASE}/{media['id']}/insights",
+                        params={**params, "metric": metrics}
+                    ).json()
+                    if "error" not in ins_resp:
+                        stats = {
+                            item["name"]: item.get("values", [{}])[0].get("value", 0)
+                            for item in ins_resp.get("data", [])
+                        }
+                except Exception:
+                    pass
+
+                titre = ""
+                if media.get("caption"):
+                    titre = media["caption"][:50] + ("…" if len(media["caption"]) > 50 else "")
+                titre = titre or fmt
+
+                vues = stats.get("impressions") or stats.get("plays") or stats.get("reach", 0)
 
                 results.append({
-                    "plateforme":   "Instagram",
-                    "date":         post_date.strftime("%Y-%m-%d"),
-                    "titre":        (media.get("caption", "")[:50] + "…") if media.get("caption") else media_type,
-                    "format":       media_type,
-                    "vues":         stats.get("impressions", 0),
-                    "reach":        stats.get("reach", 0),
-                    "abonnes":      followers,
-                    "likes":        stats.get("likes_count", 0),
-                    "commentaires": stats.get("comments_count", 0),
-                    "partages":     stats.get("shares", 0),
-                    "sauvegardes":  stats.get("saved", 0),
+                    "plateforme":    "Instagram",
+                    "date":          post_date.strftime("%Y-%m-%d"),
+                    "titre":         titre,
+                    "format":        fmt,
+                    "vues":          vues,
+                    "reach":         stats.get("reach", 0),
+                    "abonnes":       followers,
+                    "likes":         stats.get("likes", 0),
+                    "commentaires":  stats.get("comments", 0),
+                    "partages":      stats.get("shares", 0),
+                    "sauvegardes":   stats.get("saved", 0),
+                    "_channel_name": acct_name,
                 })
 
             if stop_pagination:
                 break
             next_url = media_resp.get("paging", {}).get("next")
-            page_url = next_url  # None si plus de pages
-            page_params = {}     # next URL contient déjà tous les params
+            page_url = next_url
+            page_params = {}
 
         return results
 
+    except ValueError:
+        raise   # erreurs token → remontent proprement
     except Exception as e:
         print(f"Instagram ERREUR : {e}")
         return []
@@ -385,7 +439,7 @@ def get_facebook_stats(token=None, page_id=None, days=None):
         return []
     _days = days or DAYS_TO_FETCH
     try:
-        BASE   = "https://graph.facebook.com/v19.0"
+        BASE   = "https://graph.facebook.com/v21.0"
         params = {"access_token": token}
 
         page_resp = requests.get(

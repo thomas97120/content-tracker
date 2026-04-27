@@ -42,6 +42,7 @@ APIS_FILE = "creator_apis.json"
 # Champs autorisés (whitelist stricte)
 ALLOWED_KEYS = {
     "meta_access_token",
+    "meta_token_expires_at",   # ISO date — date d'expiration du token Meta (60 jours)
     "instagram_business_id",
     "facebook_page_id",
     "youtube_api_key",
@@ -102,12 +103,16 @@ def get_masked_apis(creator_name: str) -> dict:
     result = {}
     # Clés dont la présence suffit (on affiche juste "connecté")
     TOKEN_KEYS = {"google_token", "tiktok_token"}
+    # Clés affichées en clair (pas des secrets)
+    PLAIN_KEYS = {"meta_token_expires_at"}
     for key in ALLOWED_KEYS:
         val = apis.get(key, "")
         if not val:
             result[key] = ""
         elif key in TOKEN_KEYS:
             result[key] = "connecté"
+        elif key in PLAIN_KEYS:
+            result[key] = val   # date ISO — pas un secret
         elif len(val) >= 8:
             result[key] = val[:4] + "••••" + val[-4:]
         else:

@@ -620,7 +620,7 @@ def meta_connect():
     redirect_uri = f"{APP_URL}/api/auth/meta/callback"
     scope        = "email,public_profile,instagram_basic,instagram_manage_insights,pages_show_list,pages_read_engagement"
     auth_url     = (
-        f"https://www.facebook.com/v19.0/dialog/oauth"
+        f"https://www.facebook.com/v21.0/dialog/oauth"
         f"?client_id={app_id}"
         f"&redirect_uri={redirect_uri}"
         f"&scope={scope}"
@@ -646,7 +646,7 @@ def meta_callback():
 
     # Code → token court
     token_resp  = requests.get(
-        "https://graph.facebook.com/v19.0/oauth/access_token",
+        "https://graph.facebook.com/v21.0/oauth/access_token",
         params={"client_id": app_id, "redirect_uri": redirect_uri,
                 "client_secret": app_secret, "code": code}
     ).json()
@@ -656,7 +656,7 @@ def meta_callback():
 
     # Token court → token long (60 jours)
     long_resp  = requests.get(
-        "https://graph.facebook.com/v19.0/oauth/access_token",
+        "https://graph.facebook.com/v21.0/oauth/access_token",
         params={"grant_type": "fb_exchange_token", "client_id": app_id,
                 "client_secret": app_secret, "fb_exchange_token": short_token}
     ).json()
@@ -664,12 +664,17 @@ def meta_callback():
 
     # Récupère automatiquement Page ID + Instagram Business ID
     pages_resp = requests.get(
-        "https://graph.facebook.com/v19.0/me/accounts",
+        "https://graph.facebook.com/v21.0/me/accounts",
         params={"access_token": long_token,
                 "fields": "id,name,instagram_business_account"}
     ).json()
 
     apis   = {"meta_access_token": long_token}
+
+    # Calcule et stocke la date d'expiration (60 jours)
+    expires_at = (dt.datetime.now() + dt.timedelta(days=60)).strftime("%Y-%m-%d")
+    apis["meta_token_expires_at"] = expires_at
+
     fb_id  = None
     ig_id  = None
     for page in pages_resp.get("data", []):
@@ -708,6 +713,79 @@ def save_my_apis():
     data    = request.get_json(silent=True) or {}
     save_creator_apis(creator, data)
     return jsonify({"success": True, "message": "Clés API sauvegardées."})
+
+
+@app.route("/api/creator/token-status", methods=["GET"])
+@login_required
+def token_status():
+    """Retourne le statut d'expiration des tokens OAuth (Meta 60j, TikTok 24h)."""
+    from creator_apis import get_creator_apis
+    user    = current_user()
+    creator = user.get("creator_name") or user["email"]
+    apis    = get_creator_apis(creator)
+    result  = {}
+
+    # Meta token
+    expires_at = apis.get("meta_token_expires_at", "")
+    if expires_at:
+        try:
+            exp  = dt.date.fromisoformat(expires_at)
+            days = (exp - dt.date.today()).days
+            result["meta"] = {
+                "expires_at":  expires_at,
+                "days_left":   days,
+                "status":      "ok" if days > 7 else ("warning" if days > 0 else "expired"),
+            }
+        except Exception:
+            pass
+
+    return jsonify(result)
+
+
+@app.route("/api/auth/meta/refresh", methods=["GET"])
+@login_required
+def meta_refresh():
+    """Renouvelle le token Meta (prolonge de 60 jours supplémentaires)."""
+    from creator_apis import get_creator_apis, save_creator_apis
+
+    user    = current_user()
+    creator = user.get("creator_name") or user["email"]
+    apis    = get_creator_apis(creator)
+    token   = apis.get("meta_access_token")
+
+    if not token:
+        return jsonify({"error": "Aucun token Meta trouvé"}), 400
+
+    app_id     = os.environ.get("META_APP_ID")
+    app_secret = os.environ.get("META_APP_SECRET")
+    if not app_id or not app_secret:
+        return jsonify({"error": "META_APP_ID / META_APP_SECRET manquants dans Render"}), 500
+
+    try:
+        resp = requests.get(
+            "https://graph.facebook.com/v21.0/oauth/access_token",
+            params={
+                "grant_type":       "fb_exchange_token",
+                "client_id":        app_id,
+                "client_secret":    app_secret,
+                "fb_exchange_token": token,
+            }
+        ).json()
+
+        new_token = resp.get("access_token")
+        if not new_token:
+            err = resp.get("error", {}).get("message", str(resp))
+            return jsonify({"error": f"Refresh échoué : {err}"}), 400
+
+        expires_at = (dt.datetime.now() + dt.timedelta(days=60)).strftime("%Y-%m-%d")
+        save_creator_apis(creator, {
+            "meta_access_token":    new_token,
+            "meta_token_expires_at": expires_at,
+        })
+        _clear_creator_cache(creator)
+        return jsonify({"success": True, "expires_at": expires_at, "days_left": 60})
+    except Exception as e:
+        return jsonify({"error": str(e)[:200]}), 500
 
 
 @app.route("/api/creator/apis/<key>", methods=["DELETE"])
@@ -795,7 +873,7 @@ def get_stats(creator):
         except Exception as e:
             errors.append(f"Facebook : {e}")
 
-    # TikTok
+    # TikTok (avec auto-refresh si token expiré)
     if tiktok_token:
         try:
             tt = get_tiktok_stats(tiktok_token, days=fetch_days)
@@ -803,7 +881,44 @@ def get_stats(creator):
             if not tt:
                 errors.append("TikTok : 0 résultats")
         except Exception as e:
-            errors.append(f"TikTok : {e}")
+            err_str = str(e)
+            # Tente refresh si token expiré
+            if "401" in err_str or "expired" in err_str.lower() or "token" in err_str.lower():
+                try:
+                    import json as _j
+                    td = _j.loads(tiktok_token) if isinstance(tiktok_token, str) else tiktok_token
+                    refresh_token = td.get("refresh_token")
+                    if refresh_token:
+                        from creator_apis import save_creator_apis as _sca
+                        client_key    = os.environ.get("TIKTOK_CLIENT_KEY", "")
+                        client_secret = os.environ.get("TIKTOK_CLIENT_SECRET", "")
+                        r = requests.post(
+                            "https://open.tiktokapis.com/v2/oauth/token/",
+                            headers={"Content-Type": "application/x-www-form-urlencoded"},
+                            data={
+                                "client_key":    client_key,
+                                "client_secret": client_secret,
+                                "grant_type":    "refresh_token",
+                                "refresh_token": refresh_token,
+                            }
+                        ).json()
+                        new_access = r.get("access_token")
+                        if new_access:
+                            td["access_token"]  = new_access
+                            td["refresh_token"] = r.get("refresh_token", refresh_token)
+                            new_tok_str = _j.dumps(td)
+                            _sca(creator, {"tiktok_token": new_tok_str})
+                            _clear_creator_cache(creator)
+                            tt = get_tiktok_stats(new_tok_str, days=fetch_days)
+                            live += tt
+                        else:
+                            errors.append(f"TikTok : token expiré, refresh échoué — reconnecte-toi")
+                    else:
+                        errors.append(f"TikTok : {e}")
+                except Exception as re:
+                    errors.append(f"TikTok : {e} (refresh: {re})")
+            else:
+                errors.append(f"TikTok : {e}")
 
     # Regroupe par plateforme + split période courante / précédente
     if live:
@@ -917,7 +1032,7 @@ def generate_ideas(creator):
     import uuid, json as _json, urllib.request
 
     if not _API_KEY:
-        return jsonify({"error": "GROQ_API_KEY ou OPENAI_API_KEY manquant"}), 400
+        return jsonify({"error": "Ajoute OPENROUTER_API_KEY (gratuit : openrouter.ai) dans les variables Render"}), 400
 
     # Récupère les stats depuis le cache
     cache_key = f"{creator}_30_c"

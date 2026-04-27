@@ -1558,10 +1558,21 @@ if ('serviceWorker' in navigator) {
           <div>
             <div class="account-name">Instagram</div>
             <span class="account-badge off" id="badge-instagram">Non connecté</span>
+            <div id="meta-expiry-info" style="font-size:11px;color:var(--muted);margin-top:2px;display:none"></div>
           </div>
         </div>
-        <a class="account-action primary" id="btn-connect-meta" href="/api/auth/meta/connect">Connecter</a>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button id="btn-refresh-meta" onclick="refreshMetaToken()"
+            style="display:none;padding:6px 10px;border:1px solid var(--border);border-radius:8px;
+                   background:rgba(255,179,71,.12);color:var(--amber);font-size:12px;cursor:pointer">
+            🔄 Rafraîchir
+          </button>
+          <a class="account-action primary" id="btn-connect-meta" href="/api/auth/meta/connect">Connecter</a>
+        </div>
       </div>
+      <div id="meta-expiry-warning" style="display:none;padding:8px 10px;border-radius:8px;
+           background:rgba(255,179,71,.1);border:1px solid rgba(255,179,71,.25);
+           font-size:12px;color:var(--amber);margin-top:6px"></div>
 
       <!-- TikTok -->
       <div class="account-row">
@@ -3108,15 +3119,41 @@ if ('serviceWorker' in navigator) {
           if (btnYT)   { btnYT.className = 'account-action primary'; btnYT.textContent = 'Connecter'; }
         }
 
-        // Instagram
-        const badgeIG = document.getElementById('badge-instagram');
-        const btnMeta = document.getElementById('btn-connect-meta');
+        // Instagram + expiry
+        const badgeIG      = document.getElementById('badge-instagram');
+        const btnMeta      = document.getElementById('btn-connect-meta');
+        const expiryInfo   = document.getElementById('meta-expiry-info');
+        const expiryWarn   = document.getElementById('meta-expiry-warning');
+        const btnRefresh   = document.getElementById('btn-refresh-meta');
+        const expiresAt    = data['meta_token_expires_at'] || '';
         if (metaTok && metaTok !== 'Non configuré') {
-          if (badgeIG) { badgeIG.className = 'account-badge on'; badgeIG.textContent = igId && igId !== 'Non configuré' ? '✅ Connecté' : '⚠️ Token OK, ID manquant'; }
+          const igOk = igId && igId !== 'Non configuré';
+          // Check expiry
+          let daysLeft = null;
+          if (expiresAt) {
+            const exp = new Date(expiresAt);
+            daysLeft = Math.round((exp - new Date()) / 86400000);
+          }
+          if (daysLeft !== null && daysLeft <= 0) {
+            if (badgeIG) { badgeIG.className = 'account-badge off'; badgeIG.textContent = '❌ Token expiré'; }
+            if (expiryWarn) { expiryWarn.style.display = 'block'; expiryWarn.textContent = '⚠️ Ton token Instagram a expiré — reconnecte-toi ou rafraîchis.'; }
+            if (btnRefresh) btnRefresh.style.display = 'inline-flex';
+          } else if (daysLeft !== null && daysLeft <= 7) {
+            if (badgeIG) { badgeIG.className = 'account-badge key'; badgeIG.textContent = `⚠️ Expire dans ${daysLeft}j`; }
+            if (expiryWarn) { expiryWarn.style.display = 'block'; expiryWarn.textContent = `⚠️ Token Meta expire dans ${daysLeft} jour${daysLeft > 1 ? 's' : ''} — rafraîchis maintenant pour ne pas perdre la sync.`; }
+            if (btnRefresh) btnRefresh.style.display = 'inline-flex';
+          } else {
+            if (badgeIG) { badgeIG.className = 'account-badge on'; badgeIG.textContent = igOk ? `✅ Connecté${daysLeft !== null ? ` (${daysLeft}j)` : ''}` : '⚠️ Token OK, ID manquant'; }
+            if (expiryWarn) expiryWarn.style.display = 'none';
+            if (btnRefresh && daysLeft !== null && daysLeft <= 30) btnRefresh.style.display = 'inline-flex';
+          }
+          if (expiresAt && expiryInfo) { expiryInfo.style.display = 'block'; expiryInfo.textContent = `Expire le ${expiresAt}`; }
           if (btnMeta) { btnMeta.className = 'account-action'; btnMeta.textContent = 'Reconnecter'; }
         } else {
           if (badgeIG) { badgeIG.className = 'account-badge off'; badgeIG.textContent = 'Non connecté'; }
           if (btnMeta) { btnMeta.className = 'account-action primary'; btnMeta.textContent = 'Connecter'; }
+          if (expiryWarn) expiryWarn.style.display = 'none';
+          if (btnRefresh) btnRefresh.style.display = 'none';
         }
 
         // TikTok
@@ -3173,6 +3210,25 @@ if ('serviceWorker' in navigator) {
       el.style.background  = isError ? 'rgba(255,85,85,.1)' : 'rgba(61,220,132,.1)';
       el.style.display     = 'block';
       setTimeout(() => { el.style.display = 'none'; }, 5000);
+    }
+
+    async function refreshMetaToken() {
+      const btn = document.getElementById('btn-refresh-meta');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ …'; }
+      try {
+        const resp = await fetch(`${API}/api/auth/meta/refresh`, { credentials: 'include' });
+        const data = await resp.json();
+        if (resp.ok) {
+          showOAuthStatus(`✅ Token Instagram rafraîchi — expire dans ${data.days_left} jours`);
+          loadMyApis();
+        } else {
+          showOAuthStatus(`❌ ${data.error}`, true);
+        }
+      } catch (e) {
+        showOAuthStatus('❌ Erreur réseau', true);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '🔄 Rafraîchir'; }
+      }
     }
 
     async function saveMyApis() {
