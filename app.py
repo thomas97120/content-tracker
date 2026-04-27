@@ -712,7 +712,7 @@ def meta_callback():
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/creators", methods=["GET"])
 @login_required
-def list_creators():
+def get_creators_list():
     """Liste des créateurs (admin : tous, créateur : juste le sien)."""
     user = current_user()
     if user.get("role") == "admin":
