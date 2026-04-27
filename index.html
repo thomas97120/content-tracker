@@ -3919,6 +3919,7 @@ if ('serviceWorker' in navigator) {
       const card = document.getElementById('pred-card');
       const content = document.getElementById('pred-content');
       if (!card || !content) return;
+      if (currentRole !== 'admin') { card.style.display = 'none'; return; }
 
       if (pred.error) { card.style.display = 'none'; return; }
 
@@ -4697,6 +4698,7 @@ if ('serviceWorker' in navigator) {
       const card    = document.getElementById('calendar-card');
       const content = document.getElementById('calendar-content');
       if (!card || !content) return;
+      if (currentRole !== 'admin') { card.style.display = 'none'; return; }
 
       // Collecte toutes les dates avec plateforme
       const postsByDate = {};
@@ -4797,6 +4799,7 @@ if ('serviceWorker' in navigator) {
       const card    = document.getElementById('revenue-card');
       const content = document.getElementById('revenue-content');
       if (!card || !content) return;
+      if (currentRole !== 'admin') { card.style.display = 'none'; return; }
 
       // CPM réels par format (2025) — basés sur données Creator Fund/AdSense réelles
       // YouTube Shorts  : ~$0.025/K (très bas, pool partagé)
