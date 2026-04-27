@@ -2468,9 +2468,7 @@ if ('serviceWorker' in navigator) {
           pill.dataset.filter = p;
           pill.dataset.p = p;
           const acc = allAccounts[p];
-          pill.textContent = acc?.name
-            ? `${platformEmoji(p)} ${acc.name}`
-            : `${platformEmoji(p)} ${p}`;
+          pill.textContent = `${platformEmoji(p)} ${p}`;
           pill.onclick = () => setAccountFilter(p);
           accRow.appendChild(pill);
         });
