@@ -1832,8 +1832,18 @@ if ('serviceWorker' in navigator) {
         <!-- Date & heure -->
         <div>
           <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Date & heure de publication</label>
-          <input id="sched-datetime" type="datetime-local"
-            style="width:100%;padding:10px 14px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px;box-sizing:border-box">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="position:relative">
+              <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none">📅</span>
+              <input id="sched-date" type="date"
+                style="width:100%;padding:10px 10px 10px 36px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px;box-sizing:border-box;-webkit-appearance:none">
+            </div>
+            <div style="position:relative">
+              <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none">🕐</span>
+              <input id="sched-time" type="time"
+                style="width:100%;padding:10px 10px 10px 36px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px;box-sizing:border-box;-webkit-appearance:none">
+            </div>
+          </div>
         </div>
 
         <!-- Caption -->
@@ -4002,13 +4012,16 @@ if ('serviceWorker' in navigator) {
       document.getElementById('sched-caption').value   = data?.caption || '';
       document.getElementById('sched-notes').value     = data?.notes || '';
       document.getElementById('sched-error').style.display = 'none';
-      // datetime-local attend format "YYYY-MM-DDTHH:MM"
       if (data?.scheduled_at) {
-        document.getElementById('sched-datetime').value = data.scheduled_at.slice(0,16);
+        const dt = data.scheduled_at.slice(0,16); // "YYYY-MM-DDTHH:MM"
+        document.getElementById('sched-date').value = dt.slice(0,10);
+        document.getElementById('sched-time').value = dt.slice(11,16);
       } else {
         // Défaut = demain même heure arrondie
         const d = new Date(); d.setDate(d.getDate()+1); d.setMinutes(0,0,0);
-        document.getElementById('sched-datetime').value = d.toISOString().slice(0,16);
+        const iso = d.toISOString();
+        document.getElementById('sched-date').value = iso.slice(0,10);
+        document.getElementById('sched-time').value = iso.slice(11,16);
       }
       document.getElementById('sched-delete-btn').style.display = data ? 'block' : 'none';
       document.getElementById('schedule-modal').style.display = 'flex';
@@ -4036,7 +4049,7 @@ if ('serviceWorker' in navigator) {
         title:        document.getElementById('sched-title').value.trim(),
         caption:      document.getElementById('sched-caption').value.trim(),
         notes:        document.getElementById('sched-notes').value.trim(),
-        scheduled_at: document.getElementById('sched-datetime').value,
+        scheduled_at: document.getElementById('sched-date').value + 'T' + (document.getElementById('sched-time').value || '12:00'),
       };
       if (!payload.scheduled_at) {
         errEl.textContent = 'Date et heure requises.'; errEl.style.display = 'block'; return;
