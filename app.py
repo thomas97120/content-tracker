@@ -27,11 +27,16 @@ from sheets import (
     get_creator_stats, add_manual_stats,
     get_dashboard_data, save_content_decision
 )
-# get_all_creators est défini localement (lit users.json)
+# get_all_creators est défini localement (SQLite via database.py)
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:5000")
 
-# Bootstrap historique depuis env var (Render persistence)
+# ── SQLite init (doit précéder tous les imports de stores) ────
+import database as _db
+_db.init_db()
+_db.migrate_from_json()
+
+# Bootstrap historique legacy depuis env var
 try:
     from history_store import bootstrap_from_env
     bootstrap_from_env()
@@ -53,59 +58,78 @@ limiter = Limiter(app=app, key_func=get_remote_address, default_limits=[])
 
 
 # ──────────────────────────────────────────────────────────────
-# USERS — cache mémoire + env var Render comme source initiale
+# USERS — SQLite via database.py
 # ──────────────────────────────────────────────────────────────
-USERS_FILE = "users.json"
-_users_cache: list | None = None
-
 
 def load_users() -> list:
-    global _users_cache
-    if _users_cache is not None:
-        return _users_cache
-
-    # 1. Fichier local (dev ou fichier déjà initialisé)
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            _users_cache = json.load(f)
-        return _users_cache
-
-    # 2. Env var Render (USERS_JSON) → bootstrap
-    env_data = os.environ.get("USERS_JSON")
-    if env_data:
-        _users_cache = json.loads(env_data)
-        _flush_users()          # écrit le fichier pour cette session
-        return _users_cache
-
-    _users_cache = []
-    return _users_cache
-
-
-def _flush_users():
-    """Écrit le cache sur disque."""
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(_users_cache, f, indent=2, ensure_ascii=False)
+    """Charge tous les users depuis SQLite (format liste compatible legacy)."""
+    conn = _db.get_conn()
+    rows = conn.execute(
+        "SELECT email, password_hash, role, creator_name, verified, verify_token, reset_token FROM users"
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def save_users(users: list):
-    global _users_cache
-    _users_cache = users
-    _flush_users()
+    """Met à jour tous les users (utilisé par change_password, register…)."""
+    with _db.db() as conn:
+        for u in users:
+            conn.execute("""
+                INSERT INTO users (email, password_hash, role, creator_name, verified, verify_token, reset_token)
+                VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT(email) DO UPDATE SET
+                    password_hash = excluded.password_hash,
+                    role          = excluded.role,
+                    creator_name  = excluded.creator_name,
+                    verified      = excluded.verified,
+                    verify_token  = excluded.verify_token,
+                    reset_token   = excluded.reset_token
+            """, (
+                u.get("email"), u.get("password_hash",""),
+                u.get("role","creator"), u.get("creator_name"),
+                int(u.get("verified", 1)),
+                u.get("verify_token"), u.get("reset_token"),
+            ))
+
+
+def _save_user(u: dict):
+    """Upsert un seul user."""
+    with _db.db() as conn:
+        conn.execute("""
+            INSERT INTO users (email, password_hash, role, creator_name, verified, verify_token, reset_token)
+            VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT(email) DO UPDATE SET
+                password_hash = excluded.password_hash,
+                role          = excluded.role,
+                creator_name  = excluded.creator_name,
+                verified      = excluded.verified,
+                verify_token  = excluded.verify_token,
+                reset_token   = excluded.reset_token
+        """, (
+            u.get("email"), u.get("password_hash",""),
+            u.get("role","creator"), u.get("creator_name"),
+            int(u.get("verified", 1)),
+            u.get("verify_token"), u.get("reset_token"),
+        ))
 
 
 def get_all_creators() -> list:
-    """Tous les créateurs depuis users.json (pas l'env var CREATORS)."""
-    return [
-        u["creator_name"]
-        for u in load_users()
-        if u.get("creator_name") and u.get("role") == "creator"
-    ]
+    """Tous les créateurs (role=creator avec creator_name renseigné)."""
+    conn = _db.get_conn()
+    rows = conn.execute(
+        "SELECT creator_name FROM users WHERE role='creator' AND creator_name IS NOT NULL"
+    ).fetchall()
+    return [r["creator_name"] for r in rows]
 
 
 def find_user_by_email(email: str):
-    return next(
-        (u for u in load_users() if u["email"].lower() == email.lower()), None
-    )
+    conn = _db.get_conn()
+    row  = conn.execute(
+        "SELECT email, password_hash, role, creator_name, verified, verify_token, reset_token "
+        "FROM users WHERE email = ? COLLATE NOCASE",
+        (email,)
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def current_user():
@@ -219,12 +243,11 @@ def change_password():
     if len(new_pw) < 8:
         return jsonify({"error": "Nouveau mot de passe trop court (8 car. min)"}), 400
 
-    users = load_users()
-    for u in users:
-        if u["email"] == user["email"]:
-            u["password_hash"] = generate_password_hash(new_pw)
-            break
-    save_users(users)
+    with _db.db() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE email = ? COLLATE NOCASE",
+            (generate_password_hash(new_pw), user["email"])
+        )
     return jsonify({"success": True, "message": "Mot de passe changé !"})
 
 
@@ -247,20 +270,13 @@ def register():
     if find_user_by_email(email):
         return jsonify({"error": "Cet email est déjà utilisé"}), 409
 
-    token  = secrets.token_urlsafe(32)
-    expiry = (dt.datetime.now() + dt.timedelta(hours=24)).isoformat()
+    token = secrets.token_urlsafe(32)
 
-    users = load_users()
-    users.append({
-        "email":                email,
-        "password_hash":        generate_password_hash(password),
-        "role":                 "creator",
-        "creator_name":         creator_name,
-        "verified":             False,
-        "verification_token":   token,
-        "token_expiry":         expiry,
-    })
-    save_users(users)
+    with _db.db() as conn:
+        conn.execute("""
+            INSERT INTO users (email, password_hash, role, creator_name, verified, verify_token)
+            VALUES (?,?,?,?,?,?)
+        """, (email, generate_password_hash(password), "creator", creator_name, 0, token))
     send_verification(email, token)
 
     return jsonify({
@@ -274,20 +290,19 @@ def register():
 # ──────────────────────────────────────────────────────────────
 @app.route("/api/auth/verify/<token>", methods=["GET"])
 def verify_email(token):
-    users = load_users()
-    user  = next((u for u in users if u.get("verification_token") == token), None)
+    conn = _db.get_conn()
+    user = conn.execute(
+        "SELECT email FROM users WHERE verify_token = ?", (token,)
+    ).fetchone()
 
     if not user:
         return _html_page("❌ Lien invalide", "Ce lien de vérification n'existe pas."), 400
 
-    expiry = user.get("token_expiry")
-    if expiry and dt.datetime.fromisoformat(expiry) < dt.datetime.now():
-        return _html_page("⏰ Lien expiré", "Inscris-toi à nouveau pour recevoir un nouveau lien."), 400
-
-    user["verified"] = True
-    user.pop("verification_token", None)
-    user.pop("token_expiry", None)
-    save_users(users)
+    with _db.db() as c:
+        c.execute(
+            "UPDATE users SET verified = 1, verify_token = NULL WHERE verify_token = ?",
+            (token,)
+        )
 
     return _html_page(
         "✅ Email confirmé !",
@@ -309,14 +324,11 @@ def forgot_password():
     if user:
         token  = secrets.token_urlsafe(32)
         expiry = (dt.datetime.now() + dt.timedelta(hours=1)).isoformat()
-
-        users = load_users()
-        for u in users:
-            if u["email"].lower() == email:
-                u["reset_token"]  = token
-                u["reset_expiry"] = expiry
-                break
-        save_users(users)
+        with _db.db() as conn:
+            conn.execute(
+                "UPDATE users SET reset_token = ?, reset_expires = ? WHERE email = ? COLLATE NOCASE",
+                (token, expiry, email)
+            )
         send_reset(email, token)
 
     # Toujours répondre OK (pas de fuite info sur l'existence de l'email)
@@ -393,20 +405,23 @@ def reset_password(token):
     if len(password) < 8:
         return jsonify({"error": "Mot de passe trop court"}), 400
 
-    users = load_users()
-    user  = next((u for u in users if u.get("reset_token") == token), None)
+    conn = _db.get_conn()
+    user = conn.execute(
+        "SELECT email, reset_expires FROM users WHERE reset_token = ?", (token,)
+    ).fetchone()
 
     if not user:
         return jsonify({"error": "Lien invalide ou déjà utilisé"}), 400
 
-    expiry = user.get("reset_expiry")
+    expiry = user["reset_expires"]
     if expiry and dt.datetime.fromisoformat(expiry) < dt.datetime.now():
         return jsonify({"error": "Lien expiré (1h max)"}), 400
 
-    user["password_hash"] = generate_password_hash(password)
-    user.pop("reset_token",  None)
-    user.pop("reset_expiry", None)
-    save_users(users)
+    with _db.db() as c:
+        c.execute(
+            "UPDATE users SET password_hash = ?, reset_token = NULL, reset_expires = NULL WHERE email = ?",
+            (generate_password_hash(password), user["email"])
+        )
 
     return jsonify({"success": True, "message": "Mot de passe changé ! Redirection…"})
 
@@ -1549,8 +1564,10 @@ def send_weekly_email(creator):
     </div>"""
 
     # Trouve l'email du creator
-    users = load_users()
-    user_email = next((u["email"] for u in users if u.get("creator_name") == creator), None)
+    row = _db.get_conn().execute(
+        "SELECT email FROM users WHERE creator_name = ?", (creator,)
+    ).fetchone()
+    user_email = row["email"] if row else None
     if not user_email: return jsonify({"error":"Email créateur introuvable"}), 404
 
     try:
@@ -1641,18 +1658,14 @@ def list_creators():
 @admin_required
 def export_state():
     """
-    Retourne le JSON à coller dans les env vars Render pour persister les données.
-    USERS_JSON       → users.json
-    CREATOR_APIS_JSON → creator_apis.json
+    Retourne la DB SQLite encodée en base64 pour l'env var Render DB_BACKUP_B64.
+    Colle la valeur dans Render → Environment → DB_BACKUP_B64 puis redéploie.
     """
-    from creator_apis import export_all as export_apis
     return jsonify({
-        "USERS_JSON":        load_users(),
-        "CREATOR_APIS_JSON": export_apis(),
+        "DB_BACKUP_B64": _db.export_b64(),
         "instructions": (
-            "Copie chaque valeur dans Render → Environment → ajoute/modifie "
-            "les variables USERS_JSON et CREATOR_APIS_JSON. "
-            "Redéploie ensuite pour que le bootstrap s'applique."
+            "Copie DB_BACKUP_B64 dans Render → Environment. "
+            "Au prochain déploiement, la DB sera restaurée automatiquement."
         )
     })
 

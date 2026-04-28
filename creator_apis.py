@@ -1,12 +1,10 @@
 """
-creator_apis.py — Stockage des clés API par créateur
-Fichier : creator_apis.json  |  Env var Render : CREATOR_APIS_JSON
+creator_apis.py — Stockage des clés API par créateur (SQLite)
 """
 
-import json
 import os
-from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
+from database import db, get_conn
 
 
 def _get_fernet():
@@ -37,7 +35,6 @@ def _decrypt(value: str) -> str:
     except (InvalidToken, Exception):
         return value
 
-APIS_FILE = "creator_apis.json"
 
 # Champs autorisés (whitelist stricte)
 ALLOWED_KEYS = {
@@ -51,57 +48,33 @@ ALLOWED_KEYS = {
     "tiktok_token",
 }
 
-_cache: dict | None = None
-
-
-def _load() -> dict:
-    global _cache
-    if _cache is not None:
-        return _cache
-
-    # 1. Fichier local
-    if Path(APIS_FILE).exists():
-        with open(APIS_FILE, "r", encoding="utf-8") as f:
-            _cache = json.load(f)
-        return _cache
-
-    # 2. Env var Render (CREATOR_APIS_JSON) → bootstrap
-    env_data = os.environ.get("CREATOR_APIS_JSON")
-    if env_data:
-        _cache = json.loads(env_data)
-        _flush()
-        return _cache
-
-    _cache = {}
-    return _cache
-
-
-def _flush():
-    with open(APIS_FILE, "w", encoding="utf-8") as f:
-        json.dump(_cache, f, indent=2, ensure_ascii=False)
-
 
 def get_creator_apis(creator_name: str) -> dict:
     """Retourne les vraies clés déchiffrées (usage interne serveur uniquement)."""
-    raw = _load().get(creator_name, {})
-    return {k: _decrypt(v) for k, v in raw.items()}
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT key_name, value FROM creator_apis WHERE creator_name = ?",
+        (creator_name,)
+    ).fetchall()
+    return {r["key_name"]: _decrypt(r["value"]) for r in rows}
 
 
 def save_creator_apis(creator_name: str, apis: dict):
     """Sauvegarde les clés d'un créateur (whitelist appliquée)."""
-    global _cache
-    data     = _load()
-    filtered = {k: _encrypt(v.strip()) for k, v in apis.items() if k in ALLOWED_KEYS and v}
-    data.setdefault(creator_name, {}).update(filtered)
-    _cache = data
-    _flush()
+    with db() as conn:
+        for k, v in apis.items():
+            if k in ALLOWED_KEYS and v:
+                conn.execute("""
+                    INSERT INTO creator_apis (creator_name, key_name, value)
+                    VALUES (?,?,?)
+                    ON CONFLICT(creator_name, key_name) DO UPDATE SET value = excluded.value
+                """, (creator_name, k, _encrypt(v.strip())))
 
 
 def get_masked_apis(creator_name: str) -> dict:
     """Retourne les clés masquées pour affichage côté client."""
     apis   = get_creator_apis(creator_name)
     result = {}
-    # Clés dont la présence suffit (on affiche juste "connecté")
     TOKEN_KEYS = {"google_token", "tiktok_token"}
     # Clés affichées en clair (pas des secrets)
     PLAIN_KEYS = {"meta_token_expires_at"}
@@ -121,13 +94,18 @@ def get_masked_apis(creator_name: str) -> dict:
 
 
 def delete_creator_api(creator_name: str, key: str):
-    global _cache
-    data = _load()
-    data.get(creator_name, {}).pop(key, None)
-    _cache = data
-    _flush()
+    with db() as conn:
+        conn.execute(
+            "DELETE FROM creator_apis WHERE creator_name = ? AND key_name = ?",
+            (creator_name, key)
+        )
 
 
 def export_all() -> dict:
-    """Export complet pour l'admin (pour mettre à jour l'env var Render)."""
-    return _load()
+    """Export complet pour l'admin."""
+    conn = get_conn()
+    rows = conn.execute("SELECT creator_name, key_name, value FROM creator_apis").fetchall()
+    result: dict = {}
+    for r in rows:
+        result.setdefault(r["creator_name"], {})[r["key_name"]] = r["value"]
+    return result

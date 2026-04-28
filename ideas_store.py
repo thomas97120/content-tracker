@@ -1,52 +1,55 @@
 """
-ideas_store.py — Stockage des idées de contenu par créateur
-Env var Render : IDEAS_JSON
+ideas_store.py — Stockage des idées de contenu par créateur (SQLite)
 """
-import json, os
-from pathlib import Path
 
-IDEAS_FILE = "ideas.json"
-_cache: dict | None = None
+import datetime
+from database import db, get_conn
 
-def _load() -> dict:
-    global _cache
-    if _cache is not None:
-        return _cache
-    if Path(IDEAS_FILE).exists():
-        with open(IDEAS_FILE, "r", encoding="utf-8") as f:
-            _cache = json.load(f)
-        return _cache
-    env = os.environ.get("IDEAS_JSON")
-    if env:
-        _cache = json.loads(env)
-        _flush()
-        return _cache
-    _cache = {}
-    return _cache
-
-def _flush():
-    with open(IDEAS_FILE, "w", encoding="utf-8") as f:
-        json.dump(_cache, f, indent=2, ensure_ascii=False)
 
 def get_ideas(creator: str) -> list:
-    return _load().get(creator, [])
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT id, titre, description, plateforme, format, status, created_at, decision_at "
+        "FROM ideas WHERE creator = ? ORDER BY created_at DESC",
+        (creator,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
 
 def add_idea(creator: str, idea: dict):
-    global _cache
-    data = _load()
-    data.setdefault(creator, []).append(idea)
-    _cache = data
-    _flush()
+    with db() as conn:
+        conn.execute("""
+            INSERT OR IGNORE INTO ideas
+            (id, creator, titre, description, plateforme, format, status, created_at)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (
+            idea.get("id"),
+            creator,
+            idea.get("titre"),
+            idea.get("description"),
+            idea.get("plateforme"),
+            idea.get("format"),
+            idea.get("status", "pending"),
+            idea.get("created_at", datetime.datetime.utcnow().isoformat()),
+        ))
+
 
 def update_idea_decision(creator: str, idea_id: str, decision: str):
-    global _cache
-    data = _load()
-    for idea in data.get(creator, []):
-        if idea.get("id") == idea_id:
-            idea["decided"] = decision
-            break
-    _cache = data
-    _flush()
+    """Met à jour le statut (decided) d'une idée."""
+    with db() as conn:
+        conn.execute("""
+            UPDATE ideas SET status = ?, decision_at = datetime('now')
+            WHERE creator = ? AND id = ?
+        """, (decision, creator, idea_id))
+
 
 def export_all() -> dict:
-    return _load()
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT creator, id, titre, description, plateforme, format, status, created_at, decision_at "
+        "FROM ideas"
+    ).fetchall()
+    result: dict = {}
+    for r in rows:
+        result.setdefault(r["creator"], []).append(dict(r))
+    return result

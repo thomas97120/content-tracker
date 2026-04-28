@@ -1,58 +1,60 @@
 """
-push_manager.py — Web Push notifications (VAPID / PWA)
-
-Setup Render :
-  VAPID_PUBLIC_KEY  → généré par generate_vapid_keys()
-  VAPID_PRIVATE_KEY → généré par generate_vapid_keys()
-  VAPID_EMAIL       → mailto:ton@email.com
-
-pip install pywebpush
+push_manager.py — Web Push notifications (VAPID / PWA) — SQLite storage
 """
 from __future__ import annotations
 import os
 import json
+import datetime
 
 VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
 VAPID_EMAIL       = os.environ.get("VAPID_EMAIL", "mailto:admin@content-tracker.app")
 
-# Stockage des abonnements en mémoire + fichier
-_SUBS_FILE = "push_subscriptions.json"
-_subscriptions: dict = {}   # { user_email: [subscription_info, ...] }
-
-
-def _load_subs():
-    global _subscriptions
-    if os.path.exists(_SUBS_FILE):
-        try:
-            with open(_SUBS_FILE) as f:
-                _subscriptions = json.load(f)
-        except Exception:
-            _subscriptions = {}
-
-
-def _save_subs():
-    with open(_SUBS_FILE, "w") as f:
-        json.dump(_subscriptions, f)
-
-
-_load_subs()
-
 
 def save_subscription(user_email: str, subscription: dict):
     """Enregistre ou met à jour l'abonnement push d'un utilisateur."""
-    subs = _subscriptions.setdefault(user_email, [])
+    from database import db
     endpoint = subscription.get("endpoint", "")
-    # Déduplique par endpoint
-    _subscriptions[user_email] = [s for s in subs if s.get("endpoint") != endpoint]
-    _subscriptions[user_email].append(subscription)
-    _save_subs()
+    keys     = subscription.get("keys", {})
+    p256dh   = keys.get("p256dh", "")
+    auth_key = keys.get("auth", "")
+    with db() as conn:
+        conn.execute("""
+            INSERT INTO push_subscriptions (email, endpoint, p256dh, auth_key)
+            VALUES (?,?,?,?)
+            ON CONFLICT(email, endpoint) DO UPDATE SET
+                p256dh   = excluded.p256dh,
+                auth_key = excluded.auth_key
+        """, (user_email, endpoint, p256dh, auth_key))
 
 
 def remove_subscription(user_email: str, endpoint: str):
-    subs = _subscriptions.get(user_email, [])
-    _subscriptions[user_email] = [s for s in subs if s.get("endpoint") != endpoint]
-    _save_subs()
+    from database import db
+    with db() as conn:
+        conn.execute(
+            "DELETE FROM push_subscriptions WHERE email = ? AND endpoint = ?",
+            (user_email, endpoint)
+        )
+
+
+def _get_subs(user_email: str) -> list:
+    from database import get_conn
+    rows = get_conn().execute(
+        "SELECT endpoint, p256dh, auth_key FROM push_subscriptions WHERE email = ?",
+        (user_email,)
+    ).fetchall()
+    return [
+        {"endpoint": r["endpoint"], "keys": {"p256dh": r["p256dh"], "auth": r["auth_key"]}}
+        for r in rows
+    ]
+
+
+def _get_all_emails() -> list:
+    from database import get_conn
+    rows = get_conn().execute(
+        "SELECT DISTINCT email FROM push_subscriptions"
+    ).fetchall()
+    return [r["email"] for r in rows]
 
 
 def send_push(user_email: str, title: str, body: str, url: str = "/") -> dict:
@@ -65,9 +67,9 @@ def send_push(user_email: str, title: str, body: str, url: str = "/") -> dict:
     except ImportError:
         return {"error": "pywebpush non installé (pip install pywebpush)"}
 
-    subs    = _subscriptions.get(user_email, [])
+    subs    = _get_subs(user_email)
     ok      = 0
-    failed  = []
+    expired = []
     payload = json.dumps({"title": title, "body": body, "url": url})
 
     for sub in subs:
@@ -81,25 +83,20 @@ def send_push(user_email: str, title: str, body: str, url: str = "/") -> dict:
             ok += 1
         except WebPushException as e:
             if "410" in str(e) or "404" in str(e):
-                # Abonnement expiré → retirer
-                failed.append(sub.get("endpoint", ""))
-            else:
-                failed.append(str(e)[:60])
+                expired.append(sub["endpoint"])
+            # else: log but keep
 
-    # Nettoie les abonnements expirés
-    if failed:
-        _subscriptions[user_email] = [
-            s for s in subs if s.get("endpoint") not in failed
-        ]
-        _save_subs()
+    # Nettoie abonnements expirés
+    for ep in expired:
+        remove_subscription(user_email, ep)
 
-    return {"sent": ok, "failed": len(failed)}
+    return {"sent": ok, "failed": len(expired)}
 
 
 def send_push_to_all(title: str, body: str, url: str = "/") -> dict:
     """Admin : envoie à tous les abonnés."""
     results = {}
-    for email in list(_subscriptions.keys()):
+    for email in _get_all_emails():
         results[email] = send_push(email, title, body, url)
     return results
 
@@ -132,17 +129,14 @@ def check_and_alert(user_email: str, stats_cur: dict, stats_prev: dict, days: in
     Appelé après chaque rechargement de stats.
     Envoie des push si conditions critiques détectées.
     """
-    if not _subscriptions.get(user_email):
-        return  # Pas abonné → skip
+    if not _get_subs(user_email):
+        return
 
-    # Calcule métriques
     def _sum(stats, key):
         return sum(p.get(key, 0) or 0 for pl in stats.values() for p in pl)
 
     views_cur  = _sum(stats_cur,  "vues")
     views_prev = _sum(stats_prev, "vues")
-    posts_cur  = sum(len(pl) for pl in stats_cur.values())
-    posts_prev = sum(len(pl) for pl in stats_prev.values())
 
     alerts = []
 
@@ -156,8 +150,7 @@ def check_and_alert(user_email: str, stats_cur: dict, stats_prev: dict, days: in
                 "/"
             ))
 
-    # Alerte : plus de post depuis 5+ jours
-    import datetime
+    # Alerte : inactivité 5+ jours
     all_dates = [p.get("date","") for pl in stats_cur.values() for p in pl if p.get("date")]
     if all_dates:
         latest = max(all_dates)
@@ -172,9 +165,9 @@ def check_and_alert(user_email: str, stats_cur: dict, stats_prev: dict, days: in
         except Exception:
             pass
 
-    # Alerte : engagement fort (positive)
-    likes  = _sum(stats_cur, "likes")
-    views  = _sum(stats_cur, "vues")
+    # Alerte : engagement fort
+    likes = _sum(stats_cur, "likes")
+    views = _sum(stats_cur, "vues")
     if views > 0:
         eng = (likes + _sum(stats_cur, "commentaires")) / views * 100
         if eng >= 8:
@@ -184,7 +177,7 @@ def check_and_alert(user_email: str, stats_cur: dict, stats_prev: dict, days: in
                 "/"
             ))
 
-    # Alerte : spike — une vidéo explose (3x la moyenne, min 50K vues)
+    # Alerte : spike
     all_posts = [p for pl in stats_cur.values() for p in pl]
     if len(all_posts) >= 3:
         all_views = [p.get("vues", 0) or 0 for p in all_posts]
@@ -201,5 +194,5 @@ def check_and_alert(user_email: str, stats_cur: dict, stats_prev: dict, days: in
                     "/"
                 ))
 
-    for title, body, url in alerts[:2]:   # max 2 alertes à la fois
+    for title, body, url in alerts[:2]:
         send_push(user_email, title, body, url)
