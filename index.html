@@ -1570,11 +1570,16 @@ if ('serviceWorker' in navigator) {
             <div id="meta-expiry-info" style="font-size:11px;color:var(--muted);margin-top:2px;display:none"></div>
           </div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
           <button id="btn-refresh-meta" onclick="refreshMetaToken()"
             style="display:none;padding:6px 10px;border:1px solid var(--border);border-radius:8px;
                    background:rgba(255,179,71,.12);color:var(--amber);font-size:12px;cursor:pointer">
             🔄 Rafraîchir
+          </button>
+          <button onclick="toggleMetaGuide()"
+            style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;
+                   background:rgba(255,255,255,.06);color:var(--muted);font-size:12px;cursor:pointer">
+            📖 Guide
           </button>
           <a class="account-action primary" id="btn-connect-meta" href="/api/auth/meta/connect">Connecter</a>
         </div>
@@ -1582,6 +1587,21 @@ if ('serviceWorker' in navigator) {
       <div id="meta-expiry-warning" style="display:none;padding:8px 10px;border-radius:8px;
            background:rgba(255,179,71,.1);border:1px solid rgba(255,179,71,.25);
            font-size:12px;color:var(--amber);margin-top:6px"></div>
+
+      <!-- Guide token manuel Instagram -->
+      <div id="meta-manual-guide" style="display:none;margin-top:10px;padding:14px;border-radius:12px;background:rgba(255,106,173,.07);border:1px solid rgba(255,106,173,.2)">
+        <div style="font-weight:600;font-size:13px;color:#ff6aad;margin-bottom:10px">📖 Connecter Instagram manuellement</div>
+        <ol style="color:#c8c8e0;font-size:13px;margin:0;padding-left:18px;line-height:1.8">
+          <li>Ouvre <a href="https://developers.facebook.com/tools/explorer" target="_blank" style="color:#ff6aad">Graph API Explorer</a></li>
+          <li>Sélectionne ton app <strong>Content Tracker API</strong></li>
+          <li>Clique <strong>"Générer un token d'accès"</strong> → autorise</li>
+          <li>Clique <strong>me/accounts</strong> → copie le <code style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:4px">access_token</code> de ta page Facebook</li>
+          <li>Colle-le dans le champ <strong>Meta Access Token</strong> ci-dessous</li>
+          <li>Dans la même réponse, copie l'<code style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:4px">id</code> → colle dans <strong>Facebook Page ID</strong></li>
+          <li>Pour l'<strong>Instagram Business ID</strong> : dans Graph API Explorer, tape <code style="background:rgba(255,255,255,.1);padding:1px 5px;border-radius:4px">PAGE_ID?fields=instagram_business_account</code></li>
+        </ol>
+        <div style="margin-top:10px;font-size:12px;color:#6b6b80">⚠️ Token valide 60 jours — pense à le rafraîchir avant expiration.</div>
+      </div>
 
       <!-- TikTok -->
       <div class="account-row">
@@ -3365,6 +3385,11 @@ if ('serviceWorker' in navigator) {
       el.style.background  = isError ? 'rgba(255,85,85,.1)' : 'rgba(61,220,132,.1)';
       el.style.display     = 'block';
       setTimeout(() => { el.style.display = 'none'; }, 5000);
+    }
+
+    function toggleMetaGuide() {
+      const g = document.getElementById('meta-manual-guide');
+      if (g) g.style.display = g.style.display === 'none' ? 'block' : 'none';
     }
 
     async function refreshMetaToken() {
