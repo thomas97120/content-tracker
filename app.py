@@ -1218,6 +1218,98 @@ def set_goals_route(creator):
     return jsonify({"success": True})
 
 
+# ──────────────────────────────────────────────────────────────
+# POSTS PROGRAMMÉS
+# ──────────────────────────────────────────────────────────────
+
+@app.route("/api/scheduled/<creator>", methods=["GET"])
+@login_required
+def get_scheduled(creator):
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    from scheduled_posts import get_scheduled_posts
+    return jsonify(get_scheduled_posts(creator))
+
+
+@app.route("/api/scheduled/<creator>", methods=["POST"])
+@login_required
+def create_scheduled(creator):
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    from scheduled_posts import add_scheduled_post
+    data = request.get_json(silent=True) or {}
+    if not data.get("scheduled_at"):
+        return jsonify({"error": "scheduled_at requis (ISO datetime)"}), 400
+    post = add_scheduled_post(creator, data)
+    return jsonify(post), 201
+
+
+@app.route("/api/scheduled/<creator>/<post_id>", methods=["PUT"])
+@login_required
+def update_scheduled(creator, post_id):
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    from scheduled_posts import update_scheduled_post
+    data = request.get_json(silent=True) or {}
+    post = update_scheduled_post(creator, post_id, data)
+    if not post:
+        return jsonify({"error": "Post introuvable"}), 404
+    return jsonify(post)
+
+
+@app.route("/api/scheduled/<creator>/<post_id>", methods=["DELETE"])
+@login_required
+def delete_scheduled(creator, post_id):
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+    from scheduled_posts import delete_scheduled_post
+    ok = delete_scheduled_post(creator, post_id)
+    if not ok:
+        return jsonify({"error": "Post introuvable"}), 404
+    return jsonify({"success": True})
+
+
+def _scheduled_notifier():
+    """Thread background — vérifie toutes les 5 min les posts dus et envoie push."""
+    import time as _time
+    while True:
+        try:
+            from scheduled_posts import get_due_posts, mark_notified
+            from push_manager import send_push
+            due = get_due_posts(window_minutes=15)
+            for post in due:
+                creator = post["creator"]
+                sched   = post.get("scheduled_at", "")[:16].replace("T", " ")
+                title   = post.get("title") or post.get("platform", "Post")
+                plat    = post.get("platform", "")
+                # Trouve l'email du créateur pour push
+                email = next(
+                    (u["email"] for u in load_users()
+                     if u.get("creator_name") == creator),
+                    None
+                )
+                if email:
+                    try:
+                        send_push(
+                            email,
+                            title=f"⏰ Post à publier : {title}",
+                            body=f"{plat} · Programmé à {sched}",
+                            url="/"
+                        )
+                    except Exception as _pe:
+                        print(f"[scheduler] push failed for {creator}: {_pe}")
+                mark_notified(creator, post["id"])
+        except Exception as _e:
+            print(f"[scheduler] error: {_e}")
+        _time.sleep(300)  # toutes les 5 min
+
+
+# Lancement du thread notificateur
+import threading as _threading
+_notif_thread = _threading.Thread(target=_scheduled_notifier, daemon=True)
+_notif_thread.start()
+
+
 @app.route("/api/stats/<creator>/streak", methods=["GET"])
 @login_required
 def get_streak(creator):

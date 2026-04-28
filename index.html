@@ -1760,13 +1760,115 @@ if ('serviceWorker' in navigator) {
     <div id="drawer-eng"></div>
   </div>
 
+  <!-- ── PAGE : PLANIFIER ── -->
+  <div class="page" id="page-schedule" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div class="section-title">Planifier</div>
+        <div class="section-sub">Posts programmés</div>
+      </div>
+      <button class="primary-btn" onclick="openScheduleModal()" style="padding:10px 18px;font-size:14px">+ Nouveau</button>
+    </div>
+
+    <!-- Calendrier des posts programmés -->
+    <div class="card" id="schedule-calendar-card">
+      <div class="card-title">📅 Calendrier</div>
+      <div id="schedule-calendar"></div>
+    </div>
+
+    <!-- Liste des posts à venir -->
+    <div class="card">
+      <div class="card-title">⏳ À publier</div>
+      <div id="schedule-upcoming"></div>
+    </div>
+
+    <!-- Liste des posts publiés -->
+    <div class="card" id="schedule-done-card" style="display:none">
+      <div class="card-title">✅ Publiés récemment</div>
+      <div id="schedule-done"></div>
+    </div>
+  </div>
+
+  <!-- Modal : créer / éditer post programmé -->
+  <div id="schedule-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;align-items:center;justify-content:center;padding:16px">
+    <div style="background:#1a1a24;border-radius:20px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div style="font-weight:700;font-size:18px" id="schedule-modal-title">Nouveau post</div>
+        <button onclick="closeScheduleModal()" style="background:none;border:none;color:#6b6b80;font-size:22px;cursor:pointer">✕</button>
+      </div>
+
+      <input type="hidden" id="sched-post-id">
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <!-- Plateforme -->
+        <div>
+          <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Plateforme</label>
+          <select id="sched-platform" style="width:100%;padding:10px 14px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px">
+            <option value="Instagram">📸 Instagram</option>
+            <option value="TikTok">🎵 TikTok</option>
+            <option value="YouTube">▶️ YouTube</option>
+          </select>
+        </div>
+
+        <!-- Format -->
+        <div>
+          <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Format</label>
+          <select id="sched-format" style="width:100%;padding:10px 14px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px">
+            <option value="Reel">Reel</option>
+            <option value="Video">Vidéo</option>
+            <option value="Photo">Photo</option>
+            <option value="Carrousel">Carrousel</option>
+            <option value="Short">Short</option>
+          </select>
+        </div>
+
+        <!-- Titre -->
+        <div>
+          <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Titre / sujet</label>
+          <input id="sched-title" type="text" placeholder="Ex: Vlog Tokyo jour 1" maxlength="100"
+            style="width:100%;padding:10px 14px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px;box-sizing:border-box">
+        </div>
+
+        <!-- Date & heure -->
+        <div>
+          <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Date & heure de publication</label>
+          <input id="sched-datetime" type="datetime-local"
+            style="width:100%;padding:10px 14px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px;box-sizing:border-box">
+        </div>
+
+        <!-- Caption -->
+        <div>
+          <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Légende / caption <span style="color:#444">(optionnel)</span></label>
+          <textarea id="sched-caption" rows="4" placeholder="Texte du post, hashtags..." maxlength="2200"
+            style="width:100%;padding:10px 14px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:13px;resize:vertical;box-sizing:border-box;font-family:inherit"></textarea>
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <label style="color:#6b6b80;font-size:12px;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px">Notes internes <span style="color:#444">(optionnel)</span></label>
+          <input id="sched-notes" type="text" placeholder="Ex: Ajouter mention @brand" maxlength="500"
+            style="width:100%;padding:10px 14px;background:#0d0d14;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#fff;font-size:14px;box-sizing:border-box">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button onclick="saveScheduledPost()" class="primary-btn" style="flex:1;padding:12px">Enregistrer</button>
+        <button id="sched-delete-btn" onclick="deleteScheduledPost()" style="display:none;padding:12px 16px;background:rgba(255,60,60,.15);border:1px solid rgba(255,60,60,.3);border-radius:12px;color:#ff6b6b;cursor:pointer;font-size:14px">🗑</button>
+      </div>
+      <div id="sched-error" style="color:#ff6b6b;font-size:13px;margin-top:10px;display:none"></div>
+    </div>
+  </div>
+
   <!-- Bottom nav (creator) -->
-  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(5, 1fr)">
+  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(6, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this)">
       <span class="icon">📊</span>Stats
     </button>
     <button class="nav-btn" onclick="showPage('history', this); loadHistory()">
       <span class="icon">📚</span>Historique
+    </button>
+    <button class="nav-btn" onclick="showPage('schedule', this); loadSchedule()">
+      <span class="icon">📅</span>Planifier
     </button>
     <button class="nav-btn" onclick="showPage('swipe', this)">
       <span class="icon">🎯</span>Décisions
@@ -1780,7 +1882,7 @@ if ('serviceWorker' in navigator) {
   </nav>
 
   <!-- Bottom nav (admin) -->
-  <nav class="bottom-nav hidden" id="nav-admin" style="grid-template-columns: repeat(6, 1fr)">
+  <nav class="bottom-nav hidden" id="nav-admin" style="grid-template-columns: repeat(7, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this, 'admin')">
       <span class="icon">📊</span>Stats
     </button>
@@ -1789,6 +1891,9 @@ if ('serviceWorker' in navigator) {
     </button>
     <button class="nav-btn" onclick="showPage('admin', this, 'admin')">
       <span class="icon">👑</span>Admin
+    </button>
+    <button class="nav-btn" onclick="showPage('schedule', this, 'admin'); loadSchedule()">
+      <span class="icon">📅</span>Planifier
     </button>
     <button class="nav-btn" onclick="showPage('swipe', this, 'admin')">
       <span class="icon">🎯</span>Décisions
@@ -3749,6 +3854,226 @@ if ('serviceWorker' in navigator) {
       });
     }
 
+
+    // ══════════════════════════════════════════════
+    // PLANIFICATEUR DE POSTS
+    // ══════════════════════════════════════════════
+
+    const PLATFORM_EMOJI_SCHED = { Instagram:'📸', TikTok:'🎵', YouTube:'▶️' };
+    let _scheduledPosts = [];
+    let _schedEditId    = null;
+
+    async function loadSchedule() {
+      const creator = viewedCreator || currentUser?.creator_name;
+      if (!creator) return;
+      try {
+        const r = await fetch(`${API}/api/scheduled/${encodeURIComponent(creator)}`, { credentials:'include' });
+        if (!r.ok) return;
+        _scheduledPosts = await r.json();
+        renderScheduleCalendar();
+        renderScheduleList();
+      } catch(e) {}
+    }
+
+    function renderScheduleCalendar() {
+      const el = document.getElementById('schedule-calendar');
+      if (!el) return;
+      const now   = new Date();
+      const year  = now.getFullYear();
+      const month = now.getMonth();
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      const DAYS = ['D','L','M','M','J','V','S'];
+      const monthNames = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+
+      // Map jours → posts
+      const postsByDay = {};
+      for (const p of _scheduledPosts) {
+        if (p.status === 'cancelled') continue;
+        const d = new Date(p.scheduled_at);
+        if (d.getFullYear() === year && d.getMonth() === month) {
+          const day = d.getDate();
+          (postsByDay[day] = postsByDay[day] || []).push(p);
+        }
+      }
+
+      let html = `<div style="font-weight:600;text-align:center;margin-bottom:12px;color:#c8c8e0">${monthNames[month]} ${year}</div>`;
+      html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center">';
+      DAYS.forEach(d => html += `<div style="color:#6b6b80;font-size:11px;padding:4px">${d}</div>`);
+
+      // Cellules vides avant le 1er
+      const startDay = (firstDay + 6) % 7; // Lun = 0
+      for (let i = 0; i < startDay; i++) html += '<div></div>';
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const posts = postsByDay[d] || [];
+        const isToday = d === now.getDate();
+        const hasPosts = posts.length > 0;
+        const dots = posts.slice(0,3).map(p => {
+          const c = p.platform === 'Instagram' ? '#ff6aad' : p.platform === 'TikTok' ? '#69c9d0' : '#ff4444';
+          return `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${c};margin:0 1px"></span>`;
+        }).join('');
+        html += `<div onclick="filterScheduleByDay(${d})"
+          style="padding:6px 2px;border-radius:8px;cursor:pointer;
+          background:${isToday ? 'rgba(255,106,173,.2)' : hasPosts ? 'rgba(255,255,255,.04)' : 'transparent'};
+          border:${isToday ? '1px solid rgba(255,106,173,.5)' : '1px solid transparent'}">
+          <div style="font-size:12px;color:${isToday ? '#ff6aad' : '#c8c8e0'}">${d}</div>
+          <div style="min-height:10px">${dots}</div>
+        </div>`;
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    let _schedDayFilter = null;
+    function filterScheduleByDay(day) {
+      _schedDayFilter = _schedDayFilter === day ? null : day;
+      renderScheduleList();
+    }
+
+    function renderScheduleList() {
+      const upEl   = document.getElementById('schedule-upcoming');
+      const doneEl = document.getElementById('schedule-done');
+      const doneCard = document.getElementById('schedule-done-card');
+      if (!upEl) return;
+
+      const now    = new Date();
+      const upcoming = [];
+      const done     = [];
+
+      for (const p of _scheduledPosts) {
+        if (p.status === 'cancelled') continue;
+        const d = new Date(p.scheduled_at);
+        if (_schedDayFilter) {
+          if (d.getDate() !== _schedDayFilter) continue;
+        }
+        if (p.status === 'published' || d < now) done.push(p);
+        else upcoming.push(p);
+      }
+
+      upEl.innerHTML = upcoming.length
+        ? upcoming.map(postCard).join('')
+        : '<p style="color:#6b6b80;font-size:13px;text-align:center;padding:16px 0">Aucun post programmé</p>';
+
+      if (done.length) {
+        doneEl.innerHTML = done.slice(0,10).map(postCard).join('');
+        doneCard.style.display = '';
+      } else {
+        doneCard.style.display = 'none';
+      }
+    }
+
+    function postCard(p) {
+      const d     = new Date(p.scheduled_at);
+      const emoji = PLATFORM_EMOJI_SCHED[p.platform] || '📄';
+      const dateStr = d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+      const timeStr = d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+      const isPub   = p.status === 'published';
+      const statusDot = isPub
+        ? '<span style="color:#4caf50;font-size:12px">✅ Publié</span>'
+        : `<span style="color:#ff6aad;font-size:12px">⏰ ${dateStr} à ${timeStr}</span>`;
+      return `
+        <div onclick="editScheduledPost('${p.id}')"
+          style="display:flex;align-items:start;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer">
+          <div style="font-size:24px;flex-shrink:0">${emoji}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:14px;color:#e8e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.title || p.platform}</div>
+            <div style="margin-top:3px">${statusDot} · <span style="color:#6b6b80;font-size:12px">${p.format || ''}</span></div>
+            ${p.caption ? `<div style="color:#6b6b80;font-size:12px;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.caption.slice(0,80)}…</div>` : ''}
+          </div>
+          ${!isPub ? `<button onclick="event.stopPropagation();markPostPublished('${p.id}')"
+            style="background:rgba(76,175,80,.15);border:1px solid rgba(76,175,80,.3);border-radius:8px;color:#4caf50;font-size:11px;padding:4px 8px;cursor:pointer;white-space:nowrap;flex-shrink:0">
+            ✓ Publié
+          </button>` : ''}
+        </div>`;
+    }
+
+    function openScheduleModal(data = null) {
+      _schedEditId = data?.id || null;
+      document.getElementById('schedule-modal-title').textContent = data ? 'Modifier post' : 'Nouveau post';
+      document.getElementById('sched-post-id').value    = data?.id || '';
+      document.getElementById('sched-platform').value  = data?.platform || 'Instagram';
+      document.getElementById('sched-format').value    = data?.format || 'Reel';
+      document.getElementById('sched-title').value     = data?.title || '';
+      document.getElementById('sched-caption').value   = data?.caption || '';
+      document.getElementById('sched-notes').value     = data?.notes || '';
+      document.getElementById('sched-error').style.display = 'none';
+      // datetime-local attend format "YYYY-MM-DDTHH:MM"
+      if (data?.scheduled_at) {
+        document.getElementById('sched-datetime').value = data.scheduled_at.slice(0,16);
+      } else {
+        // Défaut = demain même heure arrondie
+        const d = new Date(); d.setDate(d.getDate()+1); d.setMinutes(0,0,0);
+        document.getElementById('sched-datetime').value = d.toISOString().slice(0,16);
+      }
+      document.getElementById('sched-delete-btn').style.display = data ? 'block' : 'none';
+      document.getElementById('schedule-modal').style.display = 'flex';
+    }
+
+    function closeScheduleModal() {
+      document.getElementById('schedule-modal').style.display = 'none';
+      _schedEditId = null;
+    }
+
+    function editScheduledPost(postId) {
+      const p = _scheduledPosts.find(x => x.id === postId);
+      if (p) openScheduleModal(p);
+    }
+
+    async function saveScheduledPost() {
+      const creator = viewedCreator || currentUser?.creator_name;
+      if (!creator) return;
+      const errEl = document.getElementById('sched-error');
+      errEl.style.display = 'none';
+
+      const payload = {
+        platform:     document.getElementById('sched-platform').value,
+        format:       document.getElementById('sched-format').value,
+        title:        document.getElementById('sched-title').value.trim(),
+        caption:      document.getElementById('sched-caption').value.trim(),
+        notes:        document.getElementById('sched-notes').value.trim(),
+        scheduled_at: document.getElementById('sched-datetime').value,
+      };
+      if (!payload.scheduled_at) {
+        errEl.textContent = 'Date et heure requises.'; errEl.style.display = 'block'; return;
+      }
+
+      try {
+        let r;
+        if (_schedEditId) {
+          r = await fetch(`${API}/api/scheduled/${encodeURIComponent(creator)}/${_schedEditId}`,
+            { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        } else {
+          r = await fetch(`${API}/api/scheduled/${encodeURIComponent(creator)}`,
+            { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+        }
+        if (!r.ok) { const e = await r.json(); errEl.textContent = e.error || 'Erreur'; errEl.style.display='block'; return; }
+        closeScheduleModal();
+        await loadSchedule();
+      } catch(e) { errEl.textContent = 'Erreur réseau'; errEl.style.display='block'; }
+    }
+
+    async function deleteScheduledPost() {
+      if (!_schedEditId) return;
+      const creator = viewedCreator || currentUser?.creator_name;
+      if (!confirm('Supprimer ce post programmé ?')) return;
+      try {
+        await fetch(`${API}/api/scheduled/${encodeURIComponent(creator)}/${_schedEditId}`,
+          { method:'DELETE', credentials:'include' });
+        closeScheduleModal();
+        await loadSchedule();
+      } catch(e) {}
+    }
+
+    async function markPostPublished(postId) {
+      const creator = viewedCreator || currentUser?.creator_name;
+      try {
+        await fetch(`${API}/api/scheduled/${encodeURIComponent(creator)}/${postId}`,
+          { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ status:'published' }) });
+        await loadSchedule();
+      } catch(e) {}
+    }
 
     // ══════════════════════════════════════════════
     // PUSH NOTIFICATIONS
