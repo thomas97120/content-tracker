@@ -544,7 +544,7 @@ def tiktok_connect():
     auth_url = (
         "https://www.tiktok.com/v2/auth/authorize/"
         f"?client_key={client_key}"
-        f"&scope=user.info.basic,user.info.stats,video.list"
+        f"&scope=user.info.basic,user.info.stats,video.list,video.publish"
         f"&response_type=code"
         f"&redirect_uri={redirect_uri}"
         f"&state={state}"
@@ -1267,6 +1267,92 @@ def delete_scheduled(creator, post_id):
     if not ok:
         return jsonify({"error": "Post introuvable"}), 404
     return jsonify({"success": True})
+
+
+@app.route("/api/scheduled/<creator>/<post_id>/media", methods=["POST"])
+@login_required
+def upload_scheduled_media(creator, post_id):
+    """Upload d'un fichier média pour un post programmé."""
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+
+    from scheduled_posts import update_scheduled_post, get_scheduled_posts
+    import werkzeug.utils
+
+    if "file" not in request.files:
+        return jsonify({"error": "Aucun fichier"}), 400
+
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "Nom de fichier vide"}), 400
+
+    # Vérifie extension
+    allowed = {".mp4", ".mov", ".avi", ".m4v", ".webm"}
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in allowed:
+        return jsonify({"error": f"Format non supporté ({ext}). Accepté: mp4, mov, avi, m4v, webm"}), 400
+
+    # Stockage dans /tmp/scheduled_media/
+    media_dir = "/tmp/scheduled_media"
+    os.makedirs(media_dir, exist_ok=True)
+    safe_name = werkzeug.utils.secure_filename(f"{creator}_{post_id}{ext}")
+    save_path = os.path.join(media_dir, safe_name)
+    f.save(save_path)
+
+    # Met à jour le post avec le chemin
+    post = update_scheduled_post(creator, post_id, {"media_path": save_path, "media_name": f.filename})
+    if not post:
+        return jsonify({"error": "Post introuvable"}), 404
+
+    return jsonify({"success": True, "media_name": f.filename, "size": os.path.getsize(save_path)})
+
+
+@app.route("/api/scheduled/<creator>/<post_id>/publish", methods=["POST"])
+@login_required
+def publish_scheduled_now(creator, post_id):
+    """Publie immédiatement un post programmé TikTok."""
+    if not can_access_creator(creator):
+        return jsonify({"error": "Accès interdit"}), 403
+
+    from scheduled_posts import get_scheduled_posts, update_scheduled_post
+    from creator_apis import get_creator_apis
+
+    posts = get_scheduled_posts(creator)
+    post  = next((p for p in posts if p["id"] == post_id), None)
+    if not post:
+        return jsonify({"error": "Post introuvable"}), 404
+
+    platform = post.get("platform", "")
+
+    if platform == "TikTok":
+        media_path = post.get("media_path", "")
+        if not media_path or not os.path.exists(media_path):
+            return jsonify({"error": "Aucune vidéo uploadée pour ce post. Upload d'abord le fichier."}), 400
+
+        apis   = get_creator_apis(creator)
+        token_json = apis.get("tiktok_token", "")
+        if not token_json:
+            return jsonify({"error": "TikTok non connecté"}), 400
+
+        from tiktok_publisher import publish_video
+        result = publish_video(
+            token_json  = token_json,
+            video_path  = media_path,
+            title       = post.get("caption") or post.get("title") or "",
+            privacy     = "public",
+        )
+
+        if result.get("status") in ("published", "processing"):
+            update_scheduled_post(creator, post_id, {
+                "status":       "published",
+                "publish_id":   result.get("publish_id", ""),
+                "published_at": dt.datetime.utcnow().isoformat(),
+            })
+            return jsonify({"success": True, "result": result})
+        else:
+            return jsonify({"error": result.get("error", "Échec publication")}), 500
+
+    return jsonify({"error": f"Publication automatique non supportée pour {platform}"}), 400
 
 
 def _scheduled_notifier():

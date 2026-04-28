@@ -76,7 +76,8 @@ def update_scheduled_post(creator: str, post_id: str, updates: dict) -> dict | N
     for p in posts:
         if p["id"] == post_id:
             allowed = {"platform", "title", "caption", "format", "scheduled_at",
-                       "status", "notified", "notes"}
+                       "status", "notified", "notes", "media_path", "media_name",
+                       "publish_id", "published_at"}
             for k, v in updates.items():
                 if k in allowed:
                     p[k] = v
