@@ -1761,7 +1761,7 @@ if ('serviceWorker' in navigator) {
   </div>
 
   <!-- ── PAGE : PLANIFIER ── -->
-  <div class="page" id="page-schedule" style="display:none">
+  <div class="page" id="page-schedule">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
       <div>
         <div class="section-title">Planifier</div>
@@ -1860,7 +1860,7 @@ if ('serviceWorker' in navigator) {
   </div>
 
   <!-- Bottom nav (creator) -->
-  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(6, 1fr)">
+  <nav class="bottom-nav" id="nav-creator" style="grid-template-columns: repeat(4, 1fr)">
     <button class="nav-btn active" onclick="showPage('stats', this)">
       <span class="icon">📊</span>Stats
     </button>
@@ -1869,12 +1869,6 @@ if ('serviceWorker' in navigator) {
     </button>
     <button class="nav-btn" onclick="showPage('schedule', this); loadSchedule()">
       <span class="icon">📅</span>Planifier
-    </button>
-    <button class="nav-btn" onclick="showPage('swipe', this)">
-      <span class="icon">🎯</span>Décisions
-    </button>
-    <button class="nav-btn" onclick="showPage('saisie', this)">
-      <span class="icon">✏️</span>Saisie
     </button>
     <button class="nav-btn" onclick="showPage('settings', this); initSettingsCreatorSelector(); loadMyApis(); initPush()">
       <span class="icon">⚙️</span>Réglages
@@ -3864,8 +3858,18 @@ if ('serviceWorker' in navigator) {
     let _schedEditId    = null;
 
     async function loadSchedule() {
-      const creator = viewedCreator || currentUser?.creator_name;
-      if (!creator) return;
+      let creator = viewedCreator || currentUser?.creator_name;
+      // Admin sans créateur sélectionné → prend le premier
+      if (!creator && currentRole === 'admin') {
+        const list = await fetchCreatorList().catch(() => []);
+        creator = list[0] || null;
+        if (creator) viewedCreator = creator;
+      }
+      if (!creator) {
+        document.getElementById('schedule-upcoming').innerHTML =
+          '<p style="color:#6b6b80;font-size:13px;text-align:center;padding:16px">Sélectionne un créateur d\'abord.</p>';
+        return;
+      }
       try {
         const r = await fetch(`${API}/api/scheduled/${encodeURIComponent(creator)}`, { credentials:'include' });
         if (!r.ok) return;
