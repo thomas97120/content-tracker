@@ -1864,11 +1864,11 @@ if ('serviceWorker' in navigator) {
     <button class="nav-btn active" onclick="showPage('stats', this)">
       <span class="icon">📊</span>Stats
     </button>
-    <button class="nav-btn" onclick="showPage('history', this); loadHistory()">
-      <span class="icon">📚</span>Historique
-    </button>
     <button class="nav-btn" onclick="showPage('schedule', this); loadSchedule()">
       <span class="icon">📅</span>Planifier
+    </button>
+    <button class="nav-btn" onclick="showPage('history', this); loadHistory()">
+      <span class="icon">📚</span>Historique
     </button>
     <button class="nav-btn" onclick="showPage('settings', this); initSettingsCreatorSelector(); loadMyApis(); initPush()">
       <span class="icon">⚙️</span>Réglages
@@ -1880,14 +1880,14 @@ if ('serviceWorker' in navigator) {
     <button class="nav-btn active" onclick="showPage('stats', this, 'admin')">
       <span class="icon">📊</span>Stats
     </button>
-    <button class="nav-btn" onclick="showPage('history', this, 'admin'); loadHistory()">
-      <span class="icon">📚</span>Historique
+    <button class="nav-btn" onclick="showPage('schedule', this, 'admin'); loadSchedule()">
+      <span class="icon">📅</span>Planifier
     </button>
     <button class="nav-btn" onclick="showPage('admin', this, 'admin')">
       <span class="icon">👑</span>Admin
     </button>
-    <button class="nav-btn" onclick="showPage('schedule', this, 'admin'); loadSchedule()">
-      <span class="icon">📅</span>Planifier
+    <button class="nav-btn" onclick="showPage('history', this, 'admin'); loadHistory()">
+      <span class="icon">📚</span>Historique
     </button>
     <button class="nav-btn" onclick="showPage('swipe', this, 'admin')">
       <span class="icon">🎯</span>Décisions
