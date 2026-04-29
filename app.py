@@ -565,6 +565,7 @@ def tiktok_connect():
         f"&state={state}"
         f"&code_challenge={code_challenge}"
         f"&code_challenge_method=S256"
+        f"&force_reauth=true"
     )
     return redirect(auth_url)
 
